@@ -1,0 +1,98 @@
+.balances-container {
+  padding: 15px;
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  height: 400px; /* Fixed height to enable scrolling */
+  display: flex;
+  flex-direction: column;
+}
+
+.balances-container h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.table-container {
+  flex: 1;
+  overflow-y: auto; /* Auto overflow for better behavior */
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  scrollbar-width: thin; /* For Firefox */
+  scrollbar-color: #888 #f1f1f1; /* For Firefox */
+}
+
+/* Scrollbar styles */
+.table-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background-color: #f2f2f2;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+th, td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+}
+
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+tr:hover {
+  background-color: #f1f1f1;
+}
+
+th {
+  font-weight: bold;
+  color: #555;
+}
+
+.amount-column {
+  text-align: right;
+}
+
+.credit-amount {
+  color: #28a745;
+}
+
+.debit-amount {
+  color: #dc3545;
+}
+
+.final-balance {
+  font-weight: bold;
+  background-color: #e9ecef;
+}
+
+.final-balance td {
+  border-top: 2px solid #dee2e6;
+} 

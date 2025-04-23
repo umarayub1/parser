@@ -2,6 +2,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import './App.css';
+import StatementSummary from './components/StatementSummary';
+import TransactionsTable from './components/TransactionsTable';
+import BalancesTable from './components/BalancesTable';
 
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
 
@@ -19,10 +22,16 @@ function App() {
   const [nowPaymentsUrl, setNowPaymentsUrl] = useState(''); // To display link/QR potentially
   const [showSimulateButton, setShowSimulateButton] = useState(false); // New state
 
+  // --- State for Test Upload ---
+  const [testFilePreviewUrl, setTestFilePreviewUrl] = useState(null);
+  const [testJsonData, setTestJsonData] = useState(null);
+  const [testPdfFileName, setTestPdfFileName] = useState(''); // To show selected filename
+  const [testJsonFileName, setTestJsonFileName] = useState(''); // To show selected filename
+
   // Ref to store the realtime channel
   const channelRef = useRef(null);
 
-  // --- Configuration Check ---
+  // --- Configuration Check & Unmount Cleanup ---
   useEffect(() => {
     if (!import.meta.env.VITE_SUPABASE_URL ||
         !import.meta.env.VITE_SUPABASE_ANON_KEY ||
@@ -32,8 +41,20 @@ function App() {
     }
     // Handle return from NowPayments (doesn't confirm payment, just user action)
     handleNowPaymentsReturn();
+
+    // Cleanup function to revoke URLs when component unmounts
+    return () => {
+      if (filePreviewUrl) {
+        console.log("Revoking object URL on unmount:", filePreviewUrl);
+        URL.revokeObjectURL(filePreviewUrl);
+      }
+      if (testFilePreviewUrl) { // Add cleanup for test URL
+        console.log("Revoking TEST object URL on unmount:", testFilePreviewUrl);
+        URL.revokeObjectURL(testFilePreviewUrl);
+      }
+    };
      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Effect runs only on mount/unmount
 
   // --- Database Interaction (createInitialRequestRecord, updateRequestRecord) ---
   // Keep these functions exactly as they were in the secure Stripe version.
@@ -431,6 +452,164 @@ function App() {
       }
   };
 
+  // --- Test File Handling ---
+  const handleTestFileChange = (event) => {
+    const selectedFile = event.target.files?.[0];
+
+    // Revoke previous TEST URL if it exists FIRST
+    if (testFilePreviewUrl) {
+      console.log("Revoking previous TEST object URL:", testFilePreviewUrl);
+      URL.revokeObjectURL(testFilePreviewUrl);
+      setTestFilePreviewUrl(null); // Reset state immediately
+      setTestPdfFileName(''); // Reset filename too
+    }
+
+    if (selectedFile) {
+      if (selectedFile.type !== 'application/pdf') {
+        setError('Test file must be a PDF.');
+        // testFilePreviewUrl and testPdfFileName already cleared above
+        return;
+      }
+      // Clear normal flow data if switching to test mode
+      setFile(null);
+      // Revoke normal preview URL if it exists
+      if (filePreviewUrl) {
+          URL.revokeObjectURL(filePreviewUrl);
+          setFilePreviewUrl(null);
+      }
+      setParsedData(null);
+      setPaymentStatus('');
+      setError('');
+
+      const newPreviewUrl = URL.createObjectURL(selectedFile);
+      console.log("Creating new TEST object URL:", newPreviewUrl);
+      setTestFilePreviewUrl(newPreviewUrl);
+      setTestPdfFileName(selectedFile.name);
+      // !!! REMOVED the return cleanup function !!!
+    } else {
+        // Handle case where user cancels file selection
+        // Previous URL already revoked at the start of the function
+         setTestPdfFileName(''); // Ensure filename is cleared
+    }
+  };
+
+  const handleTestJsonChange = (event) => {
+    const selectedFile = event.target.files?.[0];
+    if (selectedFile) {
+      if (selectedFile.type !== 'application/json') {
+        setError('Test data file must be a JSON file.');
+        setTestJsonData(null);
+        setTestJsonFileName('');
+        return;
+      }
+       // Clear normal flow data if switching to test mode
+      setFile(null);
+      if (filePreviewUrl) {
+          URL.revokeObjectURL(filePreviewUrl);
+          setFilePreviewUrl(null);
+      }
+      setParsedData(null);
+      setPaymentStatus('');
+      setError('');
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target.result);
+          // Basic validation (check for expected top-level keys)
+          if (json && json.meta_data && json.transactions_data) {
+            setTestJsonData(json);
+            setTestJsonFileName(selectedFile.name);
+            setError(''); // Clear previous errors
+          } else {
+            throw new Error('Invalid JSON structure. Missing meta_data or transactions_data.');
+          }
+        } catch (parseError) {
+          console.error("Error parsing test JSON:", parseError);
+          setError(`Failed to parse test JSON: ${parseError.message}`);
+          setTestJsonData(null);
+          setTestJsonFileName('');
+        }
+      };
+      reader.onerror = () => {
+         console.error("Error reading test JSON file");
+         setError("Error reading the selected JSON file.");
+         setTestJsonData(null);
+         setTestJsonFileName('');
+      }
+      reader.readAsText(selectedFile);
+    }
+  };
+
+   // --- Reset Function ---
+   const resetState = () => {
+     // ... other resets ...
+     setPaymentStatus('');
+     setCurrentRequestId(null);
+     setNeedsParsingTrigger(false);
+     setNowPaymentsUrl('');
+     setShowSimulateButton(false);
+
+     // Revoke previous object URLs if they exist
+     if (filePreviewUrl) {
+         console.log("Resetting: Revoking object URL", filePreviewUrl);
+         URL.revokeObjectURL(filePreviewUrl);
+     }
+     if (testFilePreviewUrl) {
+         console.log("Resetting: Revoking TEST object URL", testFilePreviewUrl);
+         URL.revokeObjectURL(testFilePreviewUrl);
+     }
+
+     // Reset state AFTER revoking
+     setFile(null);
+     setFilePreviewUrl(null);
+     setParsedData(null);
+     setTestFilePreviewUrl(null);
+     setTestJsonData(null);
+     setTestPdfFileName('');
+     setTestJsonFileName('');
+     setIsLoading(false);
+     setLoadingMessage('');
+     setError('');
+   };
+
+  // Function to handle JSON download (Updated to handle test data)
+  const handleDownloadJson = useCallback(() => {
+    const dataToDownload = testJsonData || parsedData; // Prioritize test data if present
+    const sourceFileName = testPdfFileName || file?.name; // Get name from test PDF or regular PDF
+
+    if (!dataToDownload) {
+        setError("No data available to download.");
+        return;
+    }
+
+    try {
+      const jsonString = JSON.stringify(dataToDownload, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = sourceFileName
+        ? `parsed_${sourceFileName.replace(/\.pdf$/i, '')}.json`
+        : `parsed_data_${currentRequestId || 'test'}.json`;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setError(''); // Clear error on success
+    } catch (error) {
+      console.error("Error creating download link:", error);
+      setError("Could not generate download link.");
+    }
+  }, [parsedData, testJsonData, file, testPdfFileName, currentRequestId]); // Added test data dependencies
+
+  // Determine if we are showing results from test data or normal flow
+  const showTestDataResults = !!(testFilePreviewUrl && testJsonData && !isLoading);
+  const showNormalResults = !!(filePreviewUrl && parsedData && !isLoading);
+  const previewUrlToShow = showTestDataResults ? testFilePreviewUrl : filePreviewUrl;
+  const dataToShow = showTestDataResults ? testJsonData : parsedData;
+
   // --- Render Logic ---
   return (
     <div className="container">
@@ -521,40 +700,157 @@ function App() {
           </div>
       )}
 
-      {/* Results Section (same as before) */}
-      {filePreviewUrl && parsedData && !isLoading && (
-        <div className="results-section">
-           {/* ... PDF and JSON viewers ... */}
-           <h2>Results</h2>
-          <div className="results-grid">
-            <div className="pdf-viewer">
-              <h3>Original PDF</h3>
-              <iframe
-                src={filePreviewUrl}
-                width="100%"
-                height="500px"
-                title="PDF Preview"
-              />
-            </div>
-            <div className="json-viewer">
-              <h3>Parsed JSON Data</h3>
-              <pre><code>{JSON.stringify(parsedData, null, 2)}</code></pre>
-            </div>
+      {/* ---- Test Upload Section ---- */}
+      {isDevelopment && (
+        <div className="test-upload-section">
+          <h4>Quick Test Preview</h4>
+          <p>Upload a PDF and its corresponding parsed JSON to preview the layout.</p>
+          <div className="test-inputs">
+            <label htmlFor="test-pdf-upload" className={`custom-file-upload ${isLoading ? 'disabled' : ''}`}>
+              {testPdfFileName ? `Test PDF: ${testPdfFileName}` : 'Choose Test PDF'}
+            </label>
+            <input
+              id="test-pdf-upload"
+              type="file"
+              accept="application/pdf"
+              onChange={handleTestFileChange}
+              disabled={isLoading}
+            />
+            <label htmlFor="test-json-upload" className={`custom-file-upload ${isLoading ? 'disabled' : ''}`}>
+              {testJsonFileName ? `Test JSON: ${testJsonFileName}` : 'Choose Test JSON'}
+            </label>
+            <input
+              id="test-json-upload"
+              type="file"
+              accept="application/json,.json"
+              onChange={handleTestJsonChange}
+              disabled={isLoading}
+            />
+             {(testFilePreviewUrl || testJsonData) && (
+                   <button onClick={resetState} className="cta-button reset-button" disabled={isLoading}>
+                      Reset Test
+                   </button>
+              )}
           </div>
         </div>
       )}
-       {/* PDF Preview before results (same as before) */}
-       {!parsedData && filePreviewUrl && !isLoading && (
-           <div className="preview-section">
-              {/* ... iframe preview ... */}
-               <h3>PDF Preview</h3>
-               <iframe
-                src={filePreviewUrl}
-                width="100%"
-                height="500px"
-                title="PDF Preview (Before Parsing)"
-              />
+
+      {/* Results Section (Updated Layout - Conditionally renders based on test or normal data) */}
+      {(showNormalResults || showTestDataResults) && (
+        <div className="results-section">
+           <div className="results-header">
+             <h2>Results {showTestDataResults ? '(Test Preview)' : ''}</h2>
+             <button onClick={handleDownloadJson} className="cta-button download-button">
+                Download JSON
+             </button>
            </div>
+           
+           <div className="summary-section">
+             <StatementSummary metaData={dataToShow.meta_data} />
+           </div>
+
+           <div className="results-content">
+             <div className="pdf-column">
+                <iframe
+                  src={previewUrlToShow}
+                  width="100%"
+                  height="800px"
+                  title="PDF Preview"
+                />
+             </div>
+             <div className="right-column">
+               <div className="transactions-column">
+                   <TransactionsTable transactions={dataToShow.transactions_data} />
+               </div>
+               <div className="balances-section">
+                   <BalancesTable balances={dataToShow.balances} />
+               </div>
+             </div>
+           </div>
+         </div>
+      )}
+
+       {/* PDF Preview before results (Show normal preview OR test preview if JSON not loaded yet) */}
+       {(!parsedData && filePreviewUrl && !isLoading && !showTestDataResults) && (
+           <div className="results-section">
+               <div className="summary-section">
+                   <div className="summary-container">
+                       <h3>Account Summary</h3>
+                       <div className="summary-grid">
+                           <div><strong>Bank:</strong></div>
+                           <div><strong>Customer:</strong></div>
+                           <div><strong>Account Number:</strong></div>
+                           <div><strong>Offset:</strong></div>
+                           <div><strong>Starting Statement Date:</strong></div>
+                           <div><strong>Ending Statement Date:</strong></div>
+                           <div><strong>Starting Balance:</strong></div>
+                           <div><strong>Ending Balance:</strong></div>
+                           <div><strong>Total Transactions:</strong></div>
+                           <div><strong>Credits:</strong></div>
+                           <div><strong>Debits:</strong></div>
+                       </div>
+                   </div>
+               </div>
+               <div className="results-content">
+                   <div className="pdf-column">
+                       <iframe
+                        src={filePreviewUrl}
+                        width="100%"
+                        height="800px"
+                        title="PDF Preview"
+                       />
+                   </div>
+                   <div className="right-column">
+                       <div className="transactions-column">
+                           <TransactionsTable transactions={[]} />
+                       </div>
+                       <div className="balances-section">
+                           <BalancesTable balances={[]} />
+                       </div>
+                   </div>
+               </div>
+           </div>
+       )}
+       {/* Show test PDF preview if test PDF is loaded but test JSON is not yet */}
+       {(testFilePreviewUrl && !testJsonData && !isLoading) && (
+          <div className="results-section">
+              <div className="summary-section">
+                   <div className="summary-container">
+                       <h3>Account Summary</h3>
+                       <div className="summary-grid">
+                           <div><strong>Bank:</strong></div>
+                           <div><strong>Customer:</strong></div>
+                           <div><strong>Account Number:</strong></div>
+                           <div><strong>Offset:</strong></div>
+                           <div><strong>Starting Statement Date:</strong></div>
+                           <div><strong>Ending Statement Date:</strong></div>
+                           <div><strong>Starting Balance:</strong></div>
+                           <div><strong>Ending Balance:</strong></div>
+                           <div><strong>Total Transactions:</strong></div>
+                           <div><strong>Credits:</strong></div>
+                           <div><strong>Debits:</strong></div>
+                       </div>
+                   </div>
+               </div>
+              <div className="results-content">
+                  <div className="pdf-column">
+                      <iframe
+                       src={testFilePreviewUrl}
+                       width="100%"
+                       height="800px"
+                       title="PDF Preview"
+                      />
+                  </div>
+                  <div className="right-column">
+                      <div className="transactions-column">
+                          <TransactionsTable transactions={[]} />
+                      </div>
+                      <div className="balances-section">
+                          <BalancesTable balances={[]} />
+                      </div>
+                  </div>
+              </div>
+          </div>
        )}
     </div>
   );
