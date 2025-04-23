@@ -28,7 +28,7 @@ serve(async (req: Request) => {
     }
 
     // 1. Update DB Status: Submitting
-    await supabaseAdmin.from('requests').update({ parsing_status: 'submitting', parsing_started_at: new Date().toISOString() }).eq('id', requestId);
+    await supabaseAdmin.from('requests').update({ parsing_status: 'submitting' }).eq('id', requestId);
 
     // 2. Download file from Storage (same as before)
     console.log(`SUBMIT: Downloading ${storagePath} for request ${requestId}`);
@@ -95,7 +95,7 @@ serve(async (req: Request) => {
       .from('requests')
       .update({
           parsing_status: 'processing',
-          parsing_completed_at: new Date().toISOString(), // Optional: Set to now or keep null
+          parsing_started_at: new Date().toISOString(),
           error_message: null
        })
       .eq('id', requestId);
