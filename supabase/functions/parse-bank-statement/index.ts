@@ -62,6 +62,7 @@ serve(async (req: Request) => {
     // Might need to be query params instead? Adjust as needed.
     formData.append('callback_url', callbackUrl);
     formData.append('callback_headers', callbackHeaders);
+    formData.append('retries', '1');
 
     const response = await fetch(parsingSubmitUrl, {
       method: 'POST',

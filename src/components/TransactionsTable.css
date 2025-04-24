@@ -81,4 +81,15 @@ tr:hover {
 tbody td {
   font-size: 0.9em;
   color: #444;
+}
+
+/* Styles for deposit and withdrawal amounts */
+.deposit-amount {
+  color: #28a745; /* Green color for deposits */
+  font-weight: 500;
+}
+
+.withdrawal-amount {
+  color: #dc3545; /* Red color for withdrawals */
+  font-weight: 500;
 } 

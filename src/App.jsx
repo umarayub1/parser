@@ -1,12 +1,23 @@
 // src/App.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import { Link } from 'react-router-dom';
 import './App.css';
 import StatementSummary from './components/StatementSummary';
 import TransactionsTable from './components/TransactionsTable';
 import BalancesTable from './components/BalancesTable';
+import { PDFDocument } from 'pdf-lib'; // Import pdf-lib
 
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
+
+// Helper function to format time
+function formatTime(ms) {
+  if (ms <= 0) return "00:00";
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
 
 function App() {
   const [file, setFile] = useState(null);
@@ -17,10 +28,17 @@ function App() {
   const [error, setError] = useState('');
   // More detailed payment status: pending_creation, waiting, confirming, succeeded, failed, expired, canceled
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [parsingStatus, setParsingStatus] = useState('');
   const [currentRequestId, setCurrentRequestId] = useState(null);
   const [needsParsingTrigger, setNeedsParsingTrigger] = useState(false);
   const [nowPaymentsUrl, setNowPaymentsUrl] = useState(''); // To display link/QR potentially
   const [showSimulateButton, setShowSimulateButton] = useState(false); // New state
+  
+  // Added for parsing time estimation
+  const [pageCount, setPageCount] = useState(0);
+  const [timerId, setTimerId] = useState(null); // Interval ID for countdown
+  const [remainingTime, setRemainingTime] = useState(0); // Remaining time in ms
+  const [totalDuration, setTotalDuration] = useState(0); // Total duration in ms
 
   // --- State for Test Upload ---
   const [testFilePreviewUrl, setTestFilePreviewUrl] = useState(null);
@@ -56,9 +74,20 @@ function App() {
      // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Effect runs only on mount/unmount
 
+  // --- Cleanup Timer on Unmount ---
+  useEffect(() => {
+    // Cleanup function to clear interval when component unmounts
+    return () => {
+      if (timerId) {
+        console.log("Clearing timer interval on unmount:", timerId);
+        clearInterval(timerId);
+      }
+    };
+  }, [timerId]); // Dependency ensures cleanup runs if timerId changes
+
   // --- Database Interaction (createInitialRequestRecord, updateRequestRecord) ---
   // Keep these functions exactly as they were in the secure Stripe version.
-  const createInitialRequestRecord = useCallback(async (uploadedFile) => {
+  const createInitialRequestRecord = useCallback(async (uploadedFile, pageCount) => {
      // ... (same as before)
      try {
       const { data, error: dbError } = await supabase
@@ -66,6 +95,7 @@ function App() {
         .insert({
           file_name: uploadedFile.name,
           file_size: uploadedFile.size,
+          page_count: pageCount, // Add page_count here
           payment_status: 'pending', // Initial status before payment process starts
           parsing_status: 'pending',
         })
@@ -107,18 +137,20 @@ function App() {
 
   // --- Supabase Realtime Subscription ---
   useEffect(() => {
-    // Only subscribe if we have a request ID and payment isn't already succeeded/failed/canceled
-    if (currentRequestId && !['succeeded', 'failed', 'expired', 'canceled', 'refunded'].includes(paymentStatus)) {
+    // Only subscribe if we have a request ID 
+    // AND the payment process hasn't definitively failed or ended negatively.
+    // This allows listening for payment status AND subsequent parsing status after payment succeeds.
+    if (currentRequestId && !['failed', 'expired', 'canceled', 'refunded'].includes(paymentStatus)) {
       console.log(`Subscribing to Realtime updates for request ID: ${currentRequestId}`);
 
-      // Ensure cleanup of previous channel if requestId changes
+      // Ensure cleanup of previous channel if requestId changes or dependencies change
       if (channelRef.current) {
+          console.log("Removing previous Realtime channel before creating new one.");
           supabase.removeChannel(channelRef.current);
           channelRef.current = null;
-          console.log("Removed previous Realtime channel.");
       }
 
-
+      console.log(`Creating new Realtime channel for request: ${currentRequestId}`);
       const channel = supabase
         .channel(`request-status:${currentRequestId}`)
         .on(
@@ -133,56 +165,126 @@ function App() {
             console.log('Realtime UPDATE received:', payload);
             const updatedRequest = payload.new;
             if (updatedRequest) {
-                 console.log(`Request ${currentRequestId} status updated via Realtime to: ${updatedRequest.payment_status}`);
-                 // Update local state based on DB change
-                 setPaymentStatus(updatedRequest.payment_status || ''); // Use DB status
+                console.log(`Realtime: Payment Status: ${updatedRequest.payment_status}, Parsing Status: ${updatedRequest.parsing_status}`);
 
-                 if (updatedRequest.payment_status === 'succeeded') {
+                 // --- Handle Payment Status Updates --- 
+                 const currentPaymentStatus = updatedRequest.payment_status || '';
+                 setPaymentStatus(currentPaymentStatus);
+
+                 if (currentPaymentStatus === 'succeeded' && updatedRequest.parsing_status === 'pending') {
                     console.log("Payment SUCCEEDED via Realtime update!");
                     setError(''); // Clear errors like 'waiting'
-                    setNeedsParsingTrigger(true);
-                    setIsLoading(false); // Stop waiting indicator
-                    setLoadingMessage('');
+                    // Don't set isLoading false here if parsing might start
+                    if (!needsParsingTrigger) { // Only trigger if parsing hasn't started
+                        setNeedsParsingTrigger(true);
+                    }
+                    // If parsing is already in progress, don't mess with loading state
+                    // Reset loading state *after* payment success is confirmed,
+                    // allowing the user to click the 'Start Parsing' button.
+                    setIsLoading(false); 
+                    setLoadingMessage(''); // Clear any 'confirming' message
                     setNowPaymentsUrl(''); // Clear payment URL
-
-                    // Unsubscribe after success? Or keep listening for other changes?
-                    // supabase.removeChannel(channel);
-                    // channelRef.current = null;
-                 } else if (['failed', 'expired', 'canceled', 'refunded', 'partially_paid'].includes(updatedRequest.payment_status)) {
-                     console.log(`Payment ended with status: ${updatedRequest.payment_status}`);
-                     setError(`Payment status: ${updatedRequest.payment_status}. ${updatedRequest.error_message || ''}`);
+                 } else if (['failed', 'expired', 'canceled', 'refunded', 'partially_paid'].includes(currentPaymentStatus)) {
+                     console.log(`Payment ended with status: ${currentPaymentStatus}`);
+                     setError(`Payment status: ${currentPaymentStatus}. ${updatedRequest.error_message || ''}`);
                      setNeedsParsingTrigger(false);
-                     setIsLoading(false);
+                     setIsLoading(false); // Payment failed, stop loading
                      setLoadingMessage('');
-                     setNowPaymentsUrl('');
-                     // Unsubscribe on final failure/cancel states
-                     supabase.removeChannel(channel);
-                     channelRef.current = null;
-                 } else if (['waiting', 'confirming', 'confirmed', 'sending'].includes(updatedRequest.payment_status)) {
+                     // Stop parsing timer if payment fails mid-parse (unlikely but possible)
+                     // REMOVED Timer logic
+                     // REMOVED setParsingProgress(0);
+                 } else if (['waiting', 'confirming', 'confirmed', 'sending'].includes(currentPaymentStatus)) {
                      // Show progress, keep loading indicator active
                      setIsLoading(true);
-                     setLoadingMessage(`Payment status: ${updatedRequest.payment_status}...`);
+                     setLoadingMessage(`Payment status: ${currentPaymentStatus}...`);
                      setNeedsParsingTrigger(false); // Not ready to parse yet
+                 }
+                 
+                 // --- Handle Parsing Status Updates --- 
+                 const currentParsingStatus = updatedRequest.parsing_status;
+                 setParsingStatus(currentParsingStatus);
+                 // Clear timer and reset related state when parsing finishes or errors
+                 const clearTimer = () => {
+                    if (timerId) {
+                        console.log("Clearing timer interval due to parsing status:", timerId);
+                        clearInterval(timerId);
+                        setTimerId(null);
+                    }
+                    setRemainingTime(0);
+                    setTotalDuration(0);
+                 }
+
+                 if (currentParsingStatus === 'success') {
+                     console.log("Realtime: Parsing completed, received data from DB");
+                     clearTimer(); // Clear timer on success
+                     
+                     // Removed progress update
+                     
+                     try {
+                       // Ensure data exists and is valid JSON (either string or object)
+                       if (!updatedRequest.parsed_data) {
+                         throw new Error("Parsing completed but no data received from server.");
+                       }
+                       const receivedData = typeof updatedRequest.parsed_data === 'string' 
+                         ? JSON.parse(updatedRequest.parsed_data) 
+                         : updatedRequest.parsed_data;
+                       
+                       // Basic validation of received data structure
+                       if (!receivedData || !receivedData.meta_data || !receivedData.transactions_data) {
+                         throw new Error("Received data is missing expected structure (meta_data or transactions_data).");
+                       }
+
+                       setParsedData(receivedData);
+                       setIsLoading(false); // Parsing done, stop loading
+                       setLoadingMessage('Parsing Complete!'); // Confirmation message
+                       setError(''); // Clear any previous errors
+                       console.log("Successfully updated parsed data from DB");
+
+                     } catch (err) {
+                       console.error("Error processing parsed data from DB:", err);
+                       setError(`Error displaying results: ${err.message}`);
+                       setIsLoading(false); // Stop loading even if data processing fails
+                       setLoadingMessage('');
+                     }
+                     // Unsubscribe after completion? Maybe not if other updates are possible.
+                     // supabase.removeChannel(channel);
+                     // channelRef.current = null;
+                 } else if (currentParsingStatus === 'error') {
+                     console.log("Realtime: Parsing error reported from server");
+                     setError(`Parsing error: ${updatedRequest.error_message || 'Unknown processing error'}`);
+                     clearTimer(); // Clear timer on error
+                     
+                     // Removed progress reset
+                     setIsLoading(false); // Stop loading on parsing error
+                     setLoadingMessage('');
+                     // REMOVED setParsingProgress(0); // Reset progress
+                     setNeedsParsingTrigger(true); // Allow user to retry parsing if possible (e.g., re-select file)
+                     // Unsubscribe after error? 
+                     // supabase.removeChannel(channel);
+                     // channelRef.current = null;
                  }
             }
           }
         )
         .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
-                console.log(`Realtime channel subscribed for ${currentRequestId}`);
-            }
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
+                console.log(`Realtime channel subscribed successfully for ${currentRequestId}`);
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
                 console.error('Realtime subscription error:', status, err);
-                setError("Realtime connection issue. Payment status updates might be delayed. Please refresh if needed.");
-                // Maybe implement fallback polling here if critical
+                setError("Realtime connection issue. Status updates might be delayed. Please refresh if needed.");
+                // Potentially stop loading/timer if connection fails critically?
+                // setIsLoading(false); 
+                // if (parsingTimerRef.current) clearInterval(parsingTimerRef.current);
+            } else { 
+                console.log(`Realtime channel status: ${status}`);
             }
         });
 
         channelRef.current = channel; // Store the channel
 
     } else {
-         // If no request ID or payment already completed, remove listener
-          if (channelRef.current) {
+         // If no request ID or process already completed/failed, remove listener
+         if (channelRef.current) {
             console.log("Removing Realtime channel (no active request or final state).");
             supabase.removeChannel(channelRef.current);
             channelRef.current = null;
@@ -197,19 +299,19 @@ function App() {
         channelRef.current = null;
       }
     };
-    // Dependencies: only run when currentRequestId changes, or initial paymentStatus allows subscription
+  // Dependencies: Resubscribe if request ID changes, or if payment status allows subscription again.
   }, [currentRequestId, paymentStatus]);
 
 
-  // --- File Handling (same as before) ---
-  const handleFileChange = (event) => {
-    // ... (same as before) ...
+  // --- File Handling ---
+  const handleFileChange = async (event) => {
      const selectedFile = event.target.files?.[0];
      if (selectedFile) {
       if (selectedFile.type !== 'application/pdf') {
         setError('Please upload a PDF file.');
         setFile(null);
         setFilePreviewUrl(null);
+        setPageCount(0); // Reset page count
         return;
       }
       setFile(selectedFile);
@@ -218,19 +320,70 @@ function App() {
       setNeedsParsingTrigger(false);
       setNowPaymentsUrl(''); // Reset payment URL if file changes
       setShowSimulateButton(false);
+      setPageCount(0); // Reset page count initially
 
       // Don't reset paymentStatus automatically, user might have paid and wants to parse now
-      // Check if current request ID is still valid / related to this file? Maybe reset request ID too?
-      // For simplicity, let's assume a new file means a new payment process
-       if (paymentStatus !== '' && paymentStatus !== 'succeeded') { // Allow re-parse if already succeeded
-          setPaymentStatus('');
-          setCurrentRequestId(null); // Reset request ID for new file flow
-       }
-
+      if (paymentStatus !== '' && paymentStatus !== 'succeeded') { // Allow re-parse if already succeeded
+         setPaymentStatus('');
+         setCurrentRequestId(null); // Reset request ID for new file flow
+      }
 
       const previewUrl = URL.createObjectURL(selectedFile);
       setFilePreviewUrl(previewUrl);
-      return () => URL.revokeObjectURL(previewUrl);
+
+      // Get accurate page count using pdf-lib
+      setIsLoading(true); // Show loading indicator while reading PDF
+      setLoadingMessage('Reading PDF info...');
+      let pages = 0; // Initialize pages
+      try {
+        const fileBuffer = await selectedFile.arrayBuffer();
+        
+        // First attempt: Try with standard options
+        try {
+          const pdfDoc = await PDFDocument.load(fileBuffer);
+          pages = pdfDoc.getPageCount();
+        } catch (pdfError) {
+          console.log("First PDF reading attempt failed, trying with ignoreEncryption...");
+          // Second attempt: Try with ignoreEncryption
+          try {
+            const pdfDoc = await PDFDocument.load(fileBuffer, {
+              ignoreEncryption: true,
+            });
+            pages = pdfDoc.getPageCount();
+          } catch (secondError) {
+            console.log("Second PDF reading attempt failed, using fallback method...");
+            // Fallback: Use a rough estimate based on file size
+            // Average PDF page is about 50KB, but this is just a rough estimate
+            const fileSizeInKB = selectedFile.size / 1024;
+            pages = Math.max(1, Math.ceil(fileSizeInKB / 50));
+            console.log(`Using fallback page count estimate: ${pages} pages`);
+          }
+        }
+
+        setPageCount(pages);
+        console.log(`PDF pages: ${pages}`);
+        setError(''); // Clear any previous file errors
+
+      } catch (error) {
+        console.error("Error processing PDF:", error);
+        setError(`Could not process PDF: ${error.message}. Please ensure it's a valid PDF file.`);
+        // Reset file state if PDF is invalid
+        setFile(null);
+        setFilePreviewUrl(null);
+        setPageCount(0);
+        URL.revokeObjectURL(previewUrl); // Clean up preview URL
+      } finally {
+        setIsLoading(false);
+        setLoadingMessage('');
+      }
+    } else {
+      // If user cancels file selection
+      setFile(null);
+      setFilePreviewUrl(null);
+      setPageCount(0);
+      if (filePreviewUrl) {
+        URL.revokeObjectURL(filePreviewUrl); // Clean up old preview if any
+      }
     }
   };
 
@@ -240,81 +393,68 @@ function App() {
       setError('Please select a PDF file first.');
       return;
     }
+
     setError('');
     setIsLoading(true);
-    setLoadingMessage('Creating payment invoice...');
+    setLoadingMessage('Preparing payment invoice...'); // Updated message
     setPaymentStatus('pending_creation'); // New status
-    setParsedData(null);
+    setParsedData(null); // Clear any previous results before payment
     setShowSimulateButton(false);
     setNeedsParsingTrigger(false);
     setNowPaymentsUrl('');
 
-    let localRequestId = currentRequestId;
-
-    // 1. Create initial record if none exists for this flow
-    if (!localRequestId) {
-        localRequestId = await createInitialRequestRecord(file);
-        if (!localRequestId) {
-            setIsLoading(false);
-            setPaymentStatus('');
-            return; // Error set by createInitialRequestRecord
-        }
-        setCurrentRequestId(localRequestId); // Set the ID for this session/attempt
-    } else {
-        // If retrying payment for the same file/request ID, maybe clear old invoice data?
-        await updateRequestRecord(localRequestId, {
-            nowpayments_invoice_id: null,
-            nowpayments_invoice_url: null,
-            nowpayments_payment_status: null,
-            payment_status: 'pending', // Reset status before creating new invoice
-            error_message: null
-         });
-    }
-
-
-    // 2. Call Edge Function to create NowPayments Invoice
     try {
-        const { data, error: functionError } = await supabase.functions.invoke(
-            'create-nowpayments-invoice',
-            { body: { requestId: localRequestId } }
-        );
+      // Create initial request record with page count
+      console.log(`Creating initial request record for file ${file.name} with ${pageCount} pages.`);
+      const newRequestId = await createInitialRequestRecord(file, pageCount);
+      if (!newRequestId) {
+        throw new Error("Failed to create initial database record.");
+      }
+      setCurrentRequestId(newRequestId);
+      console.log(`Created request record with ID: ${newRequestId}`);
 
-        if (functionError) throw new Error(`Function error: ${functionError.message}`);
-        if (data.error) throw new Error(`Invoice creation failed: ${data.error}`);
+      // --- Call Edge Function to create NowPayments Invoice ---
+      const { data, error: functionError } = await supabase.functions.invoke(
+          'create-nowpayments-invoice',
+          { body: { requestId: newRequestId } } 
+      );
 
-        const { invoiceUrl } = data;
-        if (!invoiceUrl) throw new Error('Could not retrieve NowPayments invoice URL.');
+      if (functionError) throw new Error(`Function error: ${functionError.message}`);
+      if (data.error) throw new Error(`Invoice creation failed: ${data.error}`);
 
-        console.log("Received NowPayments URL:", invoiceUrl);
-        setNowPaymentsUrl(invoiceUrl); // Store for potential display
+      const { invoiceUrl } = data;
+      if (!invoiceUrl) throw new Error('Could not retrieve NowPayments invoice URL.');
 
-        if (isDevelopment) {
-          // In Dev: Don't redirect automatically. Show info and simulate button.
-          setLoadingMessage('Invoice created (Dev Mode). Click "Simulate Success" or pay manually.');
-          setIsLoading(false); // Stop loading indicator
-          setPaymentStatus('waiting'); // Update status
-          setShowSimulateButton(true); // Show the simulate button
-          // Optionally display the invoiceUrl link for manual testing
+      console.log("Received NowPayments URL:", invoiceUrl);
+      setNowPaymentsUrl(invoiceUrl); // Store for potential display
+
+      if (isDevelopment) {
+        // In Dev: Don't redirect automatically. Show info and simulate button.
+        setLoadingMessage('Invoice created (Dev Mode). Click "Simulate Success" or pay manually.');
+        setIsLoading(false); // Stop loading indicator
+        setPaymentStatus('waiting'); // Update status
+        setShowSimulateButton(true); // Show the simulate button
+        // Optionally display the invoiceUrl link for manual testing
       } else {
-          // In Production: Redirect immediately
-          setLoadingMessage('Redirecting to NowPayments for payment...');
-          setPaymentStatus('waiting'); // Update status
-          window.location.href = invoiceUrl; // Redirect
+        // In Production: Redirect immediately
+        setLoadingMessage('Redirecting to NowPayments for payment...');
+        setPaymentStatus('waiting'); // Update status
+        window.location.href = invoiceUrl; // Redirect
       }
 
-        // Option B: Display Link/QR (More complex - requires QR generation)
-        // setLoadingMessage('Please follow the link below to pay:');
-        // setIsLoading(false); // Stop loading if showing link
-
     } catch (err) {
-        console.error('NowPayments initiation error:', err);
-        setError(`Payment error: ${err.message}`);
-        setIsLoading(false);
-        setPaymentStatus('failed');
-        setShowSimulateButton(false);
-        if (localRequestId) {
-             await updateRequestRecord(localRequestId, { payment_status: 'failed', error_message: `Invoice creation failed: ${err.message}` });
-        }
+      console.error('Payment initiation error:', err);
+      setError(`Payment error: ${err.message}`);
+      setIsLoading(false);
+      setPaymentStatus('failed');
+      setShowSimulateButton(false);
+      // Update request record on failure if it was created
+      if (currentRequestId) {
+        await updateRequestRecord(currentRequestId, { 
+          payment_status: 'failed', 
+          error_message: `Invoice creation failed: ${err.message}` 
+        });
+      }
     }
   };
 
@@ -390,23 +530,29 @@ function App() {
 
   // --- Trigger Parsing (Secure Version - Upload to Storage, then call function) ---
   const triggerParsing = async () => {
-      // Keep this function exactly as it was in the secure Stripe version
-      // It should only be callable when paymentStatus === 'succeeded'
-       if (!file || !currentRequestId || paymentStatus !== 'succeeded') {
+      if (!file || !currentRequestId || paymentStatus !== 'succeeded') {
           setError("Cannot start parsing. Ensure payment was successful and a file is selected.");
           return;
       }
 
-      setIsLoading(true);
-      setLoadingMessage('Uploading file and starting analysis...');
+      setIsLoading(true); // Start loading
+      setLoadingMessage('Uploading file and preparing analysis...'); // Initial message
       setError('');
-      setParsedData(null);
+      setParsedData(null); // Clear previous results
       setNeedsParsingTrigger(false); // Parsing is being attempted
+
+      // Clear previous timer if any
+      if (timerId) {
+          clearInterval(timerId);
+          setTimerId(null);
+      }
+      setRemainingTime(0);
+      setTotalDuration(0);
 
       try {
           // 1. Upload file to Supabase Storage
           const timestamp = Date.now();
-          const filePath = `user_statements/${currentRequestId}_${timestamp}_${file.name}`;
+          const filePath = `user_statements/${currentRequestId}_${file.name}`;
           console.log(`Uploading to Supabase Storage: ${filePath}`);
 
           const { error: uploadError } = await supabase
@@ -417,39 +563,63 @@ function App() {
           if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
           console.log("File uploaded successfully to Storage.");
 
-          // 2. Update DB record
-          await updateRequestRecord(currentRequestId, { parsing_status: 'processing' });
-
-          // 3. Call the parsing Edge Function
-          setLoadingMessage('Parsing statement via secure function...');
-          const { data: functionResponse, error: functionError } = await supabase.functions.invoke(
+          console.log("Invoking parse-bank-statement function...");
+          const { error: functionError } = await supabase.functions.invoke(
               'parse-bank-statement',
               { body: { requestId: currentRequestId, storagePath: filePath } }
           );
 
-          if (functionError) throw new Error(`Function invocation error: ${functionError.message}`);
-          if (functionResponse.error) throw new Error(`Parsing function failed: ${functionResponse.error}`);
+          // Handle IMMEDIATE invocation errors only
+          if (functionError) {
+            throw new Error(`Function invocation failed: ${functionError.message}. Check function logs.`);
+          }
+          
+          console.log("Parse function invoked successfully. Waiting for Realtime status update...");
 
-          console.log('Parsing function successful:', functionResponse);
+          // --- Start Countdown Timer ---
+          const estimatedDurationMs = pageCount > 0 ? pageCount * 20 * 1000 : 3 * 60 * 1000; // Estimate 15 s/page, fallback 3 min
+          setTotalDuration(estimatedDurationMs);
+          setRemainingTime(estimatedDurationMs);
 
-          // 4. Update state with results (DB record updated by function)
-          setParsedData(functionResponse.data);
-          setError('');
+          const newTimerId = setInterval(() => {
+              setRemainingTime(prevTime => {
+                  const nextTime = prevTime - 1000;
+                  if (nextTime <= 0) {
+                      clearInterval(newTimerId); // Stop timer when it reaches zero
+                      setTimerId(null); // Clear the timerId state
+                      // Optionally update message: setLoadingMessage("Parsing taking longer than expected...");
+                      return 0;
+                  }
+                  return nextTime;
+              });
+          }, 1000);
+          setTimerId(newTimerId); // Store the new interval ID
+          console.log(`Started parsing timer ${newTimerId} for ${estimatedDurationMs}ms`);
+          // --- Timer End ---
+
+          // Do NOT stop loading here. The Realtime listener will handle it.
+          setIsLoading(true);
+          // Update loading message - timer will be displayed separately
+          setLoadingMessage(`Parsing in progress...`);
 
       } catch (err) {
-          console.error('Parsing trigger error:', err);
+          console.error('Error during parsing initiation:', err);
           setError(`Parsing failed: ${err.message}`);
-          setParsedData(null);
+          setIsLoading(false); // Stop loading on initiation error
+          setLoadingMessage('');
+          // Clear timer if initiation fails
+          if (timerId) clearInterval(timerId);
+          setTimerId(null);
+          setRemainingTime(0);
+          setTotalDuration(0);
+          // Optionally update DB status to error here if initiation failed badly
           if (currentRequestId) {
               await updateRequestRecord(currentRequestId, {
                   parsing_status: 'error',
-                  error_message: `Client-side parsing trigger failed: ${err.message}`
+                  error_message: `Client-side parsing initiation failed: ${err.message}`
               });
           }
-      } finally {
-          setIsLoading(false);
-          setLoadingMessage('');
-      }
+      } 
   };
 
   // --- Test File Handling ---
@@ -550,6 +720,15 @@ function App() {
      setNowPaymentsUrl('');
      setShowSimulateButton(false);
 
+     // Clear timer if running during reset
+     if (timerId) {
+         console.log("Resetting: Clearing timer interval", timerId);
+         clearInterval(timerId);
+         setTimerId(null);
+     }
+     setRemainingTime(0); // Reset timer display state
+     setTotalDuration(0);
+
      // Revoke previous object URLs if they exist
      if (filePreviewUrl) {
          console.log("Resetting: Revoking object URL", filePreviewUrl);
@@ -605,10 +784,14 @@ function App() {
   }, [parsedData, testJsonData, file, testPdfFileName, currentRequestId]); // Added test data dependencies
 
   // Determine if we are showing results from test data or normal flow
-  const showTestDataResults = !!(testFilePreviewUrl && testJsonData && !isLoading);
-  const showNormalResults = !!(filePreviewUrl && parsedData && !isLoading);
+  const showTestDataResults = !!(testFilePreviewUrl && testJsonData);
+  const showNormalResults = !!(filePreviewUrl && parsedData);
   const previewUrlToShow = showTestDataResults ? testFilePreviewUrl : filePreviewUrl;
   const dataToShow = showTestDataResults ? testJsonData : parsedData;
+
+  // Determine if we should show the placeholder preview
+  const showPlaceholderPreview = !showNormalResults && filePreviewUrl && !showTestDataResults;
+  const showTestPlaceholderPreview = !showTestDataResults && testFilePreviewUrl;
 
   // --- Render Logic ---
   return (
@@ -618,18 +801,26 @@ function App() {
       {isDevelopment && <p className="warning-message"><strong>Development Mode Active:</strong> Payment simulation enabled.</p>}
       <p className="info-message">Note: Crypto payments require network confirmations and may take some time after you send funds.</p>
 
-      {/* File Upload */}
+      {/* File Upload - Removed isLoading class */}
       <div className="upload-section">
-         <label htmlFor="file-upload" className={`custom-file-upload ${isLoading ? 'disabled' : ''}`}>
-          {file ? `Selected: ${file.name}` : '1. Choose PDF File'}
-        </label>
-        <input
-          id="file-upload"
-          type="file"
-          accept="application/pdf"
-          onChange={handleFileChange}
-          disabled={isLoading}
-        />
+         {paymentStatus !== 'succeeded' ? (
+           <>
+             <label htmlFor="file-upload" className={`custom-file-upload ${isLoading ? 'disabled' : ''}`}>
+               {file ? `Selected: ${file.name}` : '1. Choose PDF File'}
+             </label>
+             <input
+               id="file-upload"
+               type="file"
+               accept="application/pdf"
+               onChange={handleFileChange}
+               disabled={isLoading}
+             />
+           </>
+         ) : (
+           <div className="locked-file">
+             <p>✅ {file.name}</p>
+           </div>
+         )}
         {/* Pay or Parse Button */}
         {!needsParsingTrigger && paymentStatus !== 'succeeded' && (
             <button
@@ -679,23 +870,40 @@ function App() {
       {paymentStatus === 'succeeded' && !parsedData && !isLoading && !error && needsParsingTrigger && !file && (
           <p className="warning-message">Payment confirmed! Please re-select the PDF file, then click "Start Parsing".</p>
       )}
-      {/* Display NowPayments Link (Optional - if not redirecting immediately) */}
-      {/* {nowPaymentsUrl && !isLoading && (
-          <div className="payment-link-section">
-              <p>Click the link to pay:</p>
-              <a href={nowPaymentsUrl} target="_blank" rel="noopener noreferrer">{nowPaymentsUrl}</a>
-              <p>(Waiting for payment confirmation after you send funds...)</p>
+      {/* Add new success message for completed parsing */}
+      {parsedData && !isLoading && !error && (
+          <div className="success-message-container">
+              <p className="success-message">✅ Parsing completed successfully!</p>
           </div>
-      )} */}
+      )}
+      
+      {/* Add loading message that includes the permanent link */}
+      {isLoading && (parsingStatus === 'processing' || parsingStatus === 'success') && currentRequestId && (
+        <div className="parsing-link-info">
+          <p>While parsing continues, you can also <Link to={`/requests/${currentRequestId}`} target="_blank" rel="noopener noreferrer">view your request page</Link> to check the status.</p>
+        </div>
+      )}
 
-
-      {/* Loading Indicator */}
+      {/* Inline Loading Indicator Area */}
       {isLoading && (
-          <div className="loading-indicator">
-              <div className="spinner"></div>
+          <div className="loading-message-container"> {/* New container class */}
+              {/* Removed Progress Circle Logic */}
+                <div className="spinner"></div>
               <p>{loadingMessage || 'Processing...'}</p>
-              {['waiting', 'confirming', 'confirmed', 'sending'].includes(paymentStatus) && (
-                  <p>You may be redirected to NowPayments. After paying, please wait for confirmation here.</p>
+
+              {/* Show progress bar and timer only during active parsing */}
+              {loadingMessage.startsWith('Parsing in progress') && totalDuration > 0 && (
+                <div className="progress-timer">
+                  <progress max={totalDuration} value={totalDuration - remainingTime}></progress>
+                  <p className="completion-time">
+                      Estimated time remaining: {formatTime(remainingTime)}
+                  </p>
+                </div>
+              )}
+
+               {/* Simpler message for payment waiting */}
+               {['waiting', 'confirming', 'confirmed', 'sending'].includes(paymentStatus) && !loadingMessage.startsWith('Parsing in progress') && (
+                  <p className="completion-time">Waiting for payment confirmation...</p>
               )}
           </div>
       )}
@@ -735,123 +943,76 @@ function App() {
         </div>
       )}
 
-      {/* Results Section (Updated Layout - Conditionally renders based on test or normal data) */}
-      {(showNormalResults || showTestDataResults) && (
-        <div className="results-section">
-           <div className="results-header">
-             <h2>Results {showTestDataResults ? '(Test Preview)' : ''}</h2>
-             <button onClick={handleDownloadJson} className="cta-button download-button">
+      {/* Always render the results sections, regardless of data status. Use empty data when none exists. - Removed isLoading class */}
+      <div className="results-section">
+        <div className="results-header">
+          <h2>Results {showTestDataResults ? '(Test Preview)' : ''}</h2>
+          <div className="results-actions">
+            {(showNormalResults || showTestDataResults) && (
+              <button onClick={handleDownloadJson} className="cta-button download-button">
                 Download JSON
-             </button>
-           </div>
-           
-           <div className="summary-section">
-             <StatementSummary metaData={dataToShow.meta_data} />
-           </div>
-
-           <div className="results-content">
-             <div className="pdf-column">
-                <iframe
-                  src={previewUrlToShow}
-                  width="100%"
-                  height="800px"
-                  title="PDF Preview"
-                />
-             </div>
-             <div className="right-column">
-               <div className="transactions-column">
-                   <TransactionsTable transactions={dataToShow.transactions_data} />
-               </div>
-               <div className="balances-section">
-                   <BalancesTable balances={dataToShow.balances} />
-               </div>
-             </div>
-           </div>
-         </div>
-      )}
-
-       {/* PDF Preview before results (Show normal preview OR test preview if JSON not loaded yet) */}
-       {(!parsedData && filePreviewUrl && !isLoading && !showTestDataResults) && (
-           <div className="results-section">
-               <div className="summary-section">
-                   <div className="summary-container">
-                       <h3>Account Summary</h3>
-                       <div className="summary-grid">
-                           <div><strong>Bank:</strong></div>
-                           <div><strong>Customer:</strong></div>
-                           <div><strong>Account Number:</strong></div>
-                           <div><strong>Offset:</strong></div>
-                           <div><strong>Starting Statement Date:</strong></div>
-                           <div><strong>Ending Statement Date:</strong></div>
-                           <div><strong>Starting Balance:</strong></div>
-                           <div><strong>Ending Balance:</strong></div>
-                           <div><strong>Total Transactions:</strong></div>
-                           <div><strong>Credits:</strong></div>
-                           <div><strong>Debits:</strong></div>
-                       </div>
-                   </div>
-               </div>
-               <div className="results-content">
-                   <div className="pdf-column">
-                       <iframe
-                        src={filePreviewUrl}
-                        width="100%"
-                        height="800px"
-                        title="PDF Preview"
-                       />
-                   </div>
-                   <div className="right-column">
-                       <div className="transactions-column">
-                           <TransactionsTable transactions={[]} />
-                       </div>
-                       <div className="balances-section">
-                           <BalancesTable balances={[]} />
-                       </div>
-                   </div>
-               </div>
-           </div>
-       )}
-       {/* Show test PDF preview if test PDF is loaded but test JSON is not yet */}
-       {(testFilePreviewUrl && !testJsonData && !isLoading) && (
-          <div className="results-section">
-              <div className="summary-section">
-                   <div className="summary-container">
-                       <h3>Account Summary</h3>
-                       <div className="summary-grid">
-                           <div><strong>Bank:</strong></div>
-                           <div><strong>Customer:</strong></div>
-                           <div><strong>Account Number:</strong></div>
-                           <div><strong>Offset:</strong></div>
-                           <div><strong>Starting Statement Date:</strong></div>
-                           <div><strong>Ending Statement Date:</strong></div>
-                           <div><strong>Starting Balance:</strong></div>
-                           <div><strong>Ending Balance:</strong></div>
-                           <div><strong>Total Transactions:</strong></div>
-                           <div><strong>Credits:</strong></div>
-                           <div><strong>Debits:</strong></div>
-                       </div>
-                   </div>
-               </div>
-              <div className="results-content">
-                  <div className="pdf-column">
-                      <iframe
-                       src={testFilePreviewUrl}
-                       width="100%"
-                       height="800px"
-                       title="PDF Preview"
-                      />
-                  </div>
-                  <div className="right-column">
-                      <div className="transactions-column">
-                          <TransactionsTable transactions={[]} />
-                      </div>
-                      <div className="balances-section">
-                          <BalancesTable balances={[]} />
-                      </div>
-                  </div>
-              </div>
+              </button>
+            )}
+            {currentRequestId && showNormalResults && (
+              <Link to={`/requests/${currentRequestId}`} className="cta-button view-button" target="_blank" rel="noopener noreferrer">
+                View Page
+              </Link>
+            )}
           </div>
-       )}
+        </div>
+        
+        <div className="summary-section">
+          {(showNormalResults || showTestDataResults) ? (
+            <StatementSummary metaData={dataToShow.meta_data} />
+          ) : (
+            <div className="summary-container">
+              <h3>Account Summary</h3>
+              <div className="summary-grid">
+                <div><strong>Bank:</strong></div>
+                <div><strong>Customer:</strong></div>
+                <div><strong>Account Number:</strong></div>
+                <div><strong>Offset:</strong></div>
+                <div><strong>Starting Statement Date:</strong></div>
+                <div><strong>Ending Statement Date:</strong></div>
+                <div><strong>Starting Balance:</strong></div>
+                <div><strong>Ending Balance:</strong></div>
+                <div><strong>Total Transactions:</strong></div>
+                <div><strong>Credits:</strong></div>
+                <div><strong>Debits:</strong></div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="results-content">
+          <div className="pdf-column">
+            {previewUrlToShow ? (
+              <iframe
+                src={previewUrlToShow}
+                width="100%"
+                height="800px"
+                title="PDF Preview"
+              />
+            ) : (
+              <div className="empty-preview">
+                <p>PDF preview will appear here after uploading</p>
+              </div>
+            )}
+          </div>
+          <div className="right-column">
+            <div className="transactions-column">
+              <TransactionsTable 
+                transactions={(showNormalResults || showTestDataResults) ? dataToShow.transactions_data : []} 
+              />
+            </div>
+            <div className="balances-section">
+              <BalancesTable 
+                balances={(showNormalResults || showTestDataResults) ? dataToShow.balances : []} 
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

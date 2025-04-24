@@ -18,9 +18,13 @@ const formatDate = (isoString) => {
   }
 };
 
-const formatCurrency = (amount) => {
+const formatCurrency = (amount, isDeposit) => {
   if (amount === null || amount === undefined) return 'N/A';
-  return amount;
+  
+  const className = isDeposit ? 'deposit-amount' : 'withdrawal-amount';
+  const sign = isDeposit ? '+' : '-';
+  
+  return <span className={className}>{sign}{Math.abs(amount)}</span>;
 };
 
 function TransactionsTable({ transactions = [] }) {
@@ -39,11 +43,7 @@ function TransactionsTable({ transactions = [] }) {
         </thead>
         <tbody>
           {transactions.map((tx, index) => (
-            <tr key={index}> {/* Use a more stable key if available, e.g., tx.id */}
-              <td>{formatDate(tx.date)}</td>
-              <td>{tx.description}</td>
-              <td className="amount-column">{formatCurrency(tx.amount)}</td>
-            </tr>
+            <tr key={index}><td>{formatDate(tx.date)}</td><td>{tx.description}</td><td className="amount-column">{formatCurrency(tx.amount, tx.deposit)}</td></tr>
           ))}
         </tbody>
       </table>

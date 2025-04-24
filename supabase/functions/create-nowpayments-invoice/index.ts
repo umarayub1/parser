@@ -22,13 +22,43 @@ serve(async (req: Request) => {
     const { requestId } = await req.json();
     if (!requestId) throw new Error("Request ID is required.");
 
+    // --- Fetch page_count for the request ---
+    const { data: requestData, error: fetchError } = await supabaseAdmin
+      .from('requests')
+      .select('page_count') // Assuming a 'page_count' column exists
+      .eq('id', requestId)
+      .single();
+
+    if (fetchError) {
+      console.error(`Error fetching request details for ${requestId}:`, fetchError);
+      throw new Error(`Could not retrieve request details: ${fetchError.message}`);
+    }
+    if (!requestData) {
+      throw new Error(`Request record not found for ID: ${requestId}`);
+    }
+
+    const pageCount = requestData.page_count;
+    if (pageCount === null || pageCount === undefined || typeof pageCount !== 'number' || pageCount < 0) {
+        console.warn(`Invalid page_count (${pageCount}) for request ${requestId}. Using minimum price.`);
+        // Decide how to handle invalid page count - using minimum price here
+    }
+    // --- Calculate Dynamic Price ---
+    // Price is max(0.1 * pageCount, $2.00)
+    // Ensure pageCount is treated as 0 if invalid/null for calculation
+    const calculatedPrice = Math.max(0.1 * (pageCount > 0 ? pageCount : 0), 2.00); 
+    const priceAmountString = calculatedPrice.toFixed(2); // Ensure 2 decimal places
+
+    console.log(`Request ID: ${requestId}, Page Count: ${pageCount}, Calculated Price: $${priceAmountString}`);
+    // --- End Price Calculation ---
+
+
     const apiKey = Deno.env.get('NOWPAYMENTS_API_KEY');
     const ipnCallbackUrl = Deno.env.get('IPN_CALLBACK_URL');
     const appBaseUrl = Deno.env.get('APP_BASE_URL');
-    const priceAmount = Deno.env.get('PAYMENT_PRICE_AMOUNT');
+    // const priceAmount = Deno.env.get('PAYMENT_PRICE_AMOUNT'); // No longer used directly
     const priceCurrency = Deno.env.get('PAYMENT_PRICE_CURRENCY');
 
-    if (!apiKey || !ipnCallbackUrl || !appBaseUrl || !priceAmount || !priceCurrency) {
+    if (!apiKey || !ipnCallbackUrl || !appBaseUrl || !priceCurrency) { // Removed priceAmount check
          throw new Error("Missing required environment variables for NowPayments invoice creation.");
     }
 
@@ -36,10 +66,10 @@ serve(async (req: Request) => {
     const cancelUrl = `${appBaseUrl}?payment_return=cancel&request_id=${requestId}`;
 
     const invoicePayload = {
-      price_amount: parseFloat(priceAmount),
+      price_amount: parseFloat(priceAmountString), // Use the calculated price
       price_currency: priceCurrency,
       order_id: requestId, // Link invoice to our internal request ID
-      // order_description: "Bank Statement Parsing", // Optional
+      // order_description: `Bank Statement Parsing (${pageCount} pages)`, // Optional enhanced description
       ipn_callback_url: ipnCallbackUrl,
       success_url: successUrl, // Where user returns after potential success
       cancel_url: cancelUrl,   // Where user returns if they cancel on NowPayments page
