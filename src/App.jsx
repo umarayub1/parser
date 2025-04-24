@@ -552,8 +552,13 @@ function App() {
       try {
           // 1. Upload file to Supabase Storage
           const timestamp = Date.now();
-          const filePath = `user_statements/${currentRequestId}_${file.name}`;
+          const filePath = `user_statements/${currentRequestId}_${timestamp}_${file.name}`;
           console.log(`Uploading to Supabase Storage: ${filePath}`);
+
+          // store the path in the request record
+          await updateRequestRecord(currentRequestId, {
+            storage_path: filePath
+          });
 
           const { error: uploadError } = await supabase
               .storage
@@ -577,7 +582,7 @@ function App() {
           console.log("Parse function invoked successfully. Waiting for Realtime status update...");
 
           // --- Start Countdown Timer ---
-          const estimatedDurationMs = pageCount > 0 ? pageCount * 20 * 1000 : 3 * 60 * 1000; // Estimate 15 s/page, fallback 3 min
+          const estimatedDurationMs = pageCount > 0 ? pageCount * 20 * 1000 : 3 * 60 * 1000; // Estimate 20 s/page, fallback 3 min
           setTotalDuration(estimatedDurationMs);
           setRemainingTime(estimatedDurationMs);
 

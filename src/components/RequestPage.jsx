@@ -6,6 +6,15 @@ import TransactionsTable from './TransactionsTable';
 import BalancesTable from './BalancesTable';
 import '../App.css';
 
+// Helper function to format time (needed for dynamic remaining time)
+function formatTime(ms) {
+  if (ms <= 0) return "00:00";
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 function RequestPage() {
   const { requestId } = useParams();
   const [parsedData, setParsedData] = useState(null);
@@ -13,6 +22,8 @@ function RequestPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [previewUrl, setPreviewUrl] = useState(null);
+  // State to trigger per-second updates while processing
+  const [now, setNow] = useState(() => Date.now());
 
   const channelRef = useRef(null);
 
@@ -67,6 +78,8 @@ function RequestPage() {
           setParsedData(receivedData);
         } else if (requestData.parsing_status === 'error') {
           setError(`Parsing error: ${requestData.error_message || 'Unknown error'}`);
+        } else if (requestData.parsing_status === 'processing' && requestData.payment_status === 'succeeded') {
+           // Initial load shows processing - start timer if page count exists
         } else if (requestData.parsing_status === 'pending') {
           if (requestData.payment_status === 'succeeded') {
             // Payment is good, parsing just hasn't started or is in progress
@@ -181,7 +194,7 @@ function RequestPage() {
 
               } else if (updatedRequest.parsing_status === 'processing') {
                 console.log("Realtime: Parsing switched to 'processing'.");
-                setIsLoading(true);
+                // Don't set isLoading here, let the component manage it based on timer/data presence
                 setError('');
                 setParsedData(null);
               }
@@ -216,6 +229,33 @@ function RequestPage() {
       }
     };
   }, [requestId, request, previewUrl]);
+
+  // --- Effect for Per-Second Update Timer --- 
+  useEffect(() => {
+    let intervalId = null;
+
+    // Start timer only when processing
+    if (request && request.parsing_status === 'processing') {
+      console.log("Starting per-second update timer.");
+      intervalId = setInterval(() => {
+        setNow(Date.now());
+      }, 1000);
+    } else {
+      // If not processing, ensure no timer is running
+      if (intervalId) {
+          console.log("Clearing per-second update timer because status changed.");
+          clearInterval(intervalId);
+      }
+    }
+
+    // Cleanup function to clear interval on unmount or when status changes
+    return () => {
+      if (intervalId) {
+        console.log("Clearing per-second update timer on cleanup.");
+        clearInterval(intervalId);
+      }
+    };
+  }, [request]); // Re-run when request (and thus status) changes
 
   // Function to handle JSON download
   const handleDownloadJson = () => {
@@ -268,36 +308,86 @@ function RequestPage() {
         </div>
       ) : null}
       
-      {/* Pending Parsing Status */}
-      {!isLoading && !error && request && request.parsing_status === 'processing' && request.payment_status === 'succeeded' && (
-        <div className="pending-parsing-container">
-          <div className="spinner"></div>
-          <div className="pending-message">
-            <h3>Parsing in Progress</h3>
-            <p>Your bank statement is currently being processed. This may take several minutes depending on the size of the document.</p>
-            {request.page_count && (
-              <>
-                <p>Estimated duration: {Math.ceil((request.page_count * 20 * 1000) / 60000)} minutes</p>
-                <p>Expected completion: {new Date(Date.now() + (request.page_count * 20 * 1000)).toLocaleTimeString()}</p>
-              </>
-            )}
-            <p>You can leave this page and come back later - the permanent link will always show the latest status.</p>
+      {/* Pending Parsing Status with Dynamic Time Calculation */}
+      {!isLoading && !error && request && request.parsing_status === 'processing' && request.payment_status === 'succeeded' && (() => {
+        const estimatedDurationMs = request.page_count > 0 ? request.page_count * 20 * 1000 : 3 * 60 * 1000; // 20s/page, fallback 3 min
+        const createdAtTime = new Date(request.created_at).getTime();
+        const elapsedTime = now - createdAtTime; // Use state 'now' for current time
+        const remainingMs = Math.max(0, estimatedDurationMs - elapsedTime);
+        const completionTime = new Date(createdAtTime + estimatedDurationMs);
+
+        return (
+          <div className="pending-parsing-container loading-message-container">
+            <div className="spinner"></div>
+            <div className="pending-message">
+              <h3>Parsing in Progress...</h3>
+              <p>Your bank statement is currently being processed. This may take several minutes depending on the size of the document.</p>
+              
+              {/* Original Estimates & Dynamic Remaining Time */}
+              {request.page_count ? (
+                <div className="progress-timer"> {/* Reusing class for styling */}
+                  <p>Estimated total duration: ~{Math.ceil(estimatedDurationMs / 60000)} minutes ({request.page_count} pages)</p>
+                  <br />
+                  <p>Calculated time remaining: {formatTime(remainingMs)}</p>
+                  <br />
+                  <p>Expected completion around: {completionTime.toLocaleTimeString()}</p>
+                  {/* Optional: Add a simple progress bar based on elapsed time */} 
+                  {/* <progress max={estimatedDurationMs} value={elapsedTime}></progress> */}
+                </div>
+              ) : (
+                 <p>Estimating time (no page count)...</p>
+              )}
+
+              <p>You can leave this page and come back later - the permanent link will always show the latest status.</p>
+            </div>
           </div>
-        </div>
+        );
+      })()}
+
+      {/* Add success message like in App.jsx */}
+      {parsedData && !isLoading && !error && (
+          <div className="success-message-container">
+              <p className="success-message">✅ Parsing completed successfully!</p>
+          </div>
       )}
 
       {/* Results Section - Only show if we have parsed data */}
       {parsedData && (
         <div className="results-section">
+          {/* --- Success Message Banner REMOVED --- */}
+          {/* <div className="success-banner"> ... </div> */}
+          {/* --- End Success Message Banner --- */}
+
           <div className="results-header">
-            <h2>Results</h2>
+            <h2>Results</h2> {/* Changed back from Results Details */}
+            {/* Removed extra button from banner */}
             <button onClick={handleDownloadJson} className="cta-button download-button">
               Download JSON
             </button>
           </div>
           
           <div className="summary-section">
+            {/* --- Accuracy Message for Zero Offset (Styled like Success Message) --- */}
+            {parsedData && parsedData.meta_data && parsedData.meta_data['Ending Balance Offset'] === 0 && (
+              <div className="success-message-container accuracy-success"> {/* Added modifier class */}
+                 <p className="success-message"> 
+                   {/* Replaced text with user's new version */}
+                   🎯 100% Parsing Accuracy<br />
+                   Our parser achieved flawless accuracy with 0 offset.
+                 </p>
+              </div>
+            )}
+            {/* --- End Accuracy Message --- */}
+
             <StatementSummary metaData={parsedData.meta_data} />
+
+            {/* --- Offset Calculation Note --- */}
+            {parsedData && parsedData.meta_data && typeof parsedData.meta_data['Ending Balance Offset'] !== 'undefined' && (
+              <p className="offset-calculation-note">
+                <strong>Note:</strong> The 'Ending Balance Offset' is calculated as (Beginning Balance - Debits + Credits - Ending Balance). A value of 0 indicates perfect balance.
+              </p>
+            )}
+            {/* --- End Offset Calculation Note --- */}
           </div>
 
           <div className="results-content">

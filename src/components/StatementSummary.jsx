@@ -45,7 +45,7 @@ function StatementSummary({ metaData }) {
         <div><strong>Bank:</strong> {bankName || 'N/A'}</div>
         <div><strong>Customer:</strong> {customerName || 'N/A'}</div>
         <div><strong>Account Number:</strong> {accountNumber || 'N/A'}</div>
-        <div><strong>Offset:</strong> {balanceOffset}</div>
+        <div><strong>Ending Balalnce Offset:</strong> {balanceOffset}</div>
         <div><strong>Starting Statement Date:</strong> {formatDate(startDate)}</div>
         <div><strong>Ending Statement Date:</strong> {formatDate(endDate)}</div>
         <div><strong>Starting Balance:</strong> {formatCurrency(startBalance)}</div>
