@@ -1,5 +1,6 @@
 // src/App.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSelector, useDispatch } from 'react-redux'; // Import Redux hooks
 import { supabase } from './supabaseClient';
 import { Link } from 'react-router-dom';
 import './App.css';
@@ -7,6 +8,18 @@ import StatementSummary from './components/StatementSummary';
 import TransactionsTable from './components/TransactionsTable';
 import BalancesTable from './components/BalancesTable';
 import { PDFDocument } from 'pdf-lib'; // Import pdf-lib
+// Import Redux actions and selectors
+import {
+  setSession,
+  // clearSession, // We might let the listener handle clearing via setSession(null)
+  getSessionThunk,
+  signInWithOAuthThunk,
+  signOutThunk,
+  selectSession, // Import selector
+  selectUser, // <<< Add selectUser import
+  selectAuthLoading,
+  selectAuthError
+} from './store/authSlice'; // Adjust path as necessary
 
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
 
@@ -49,6 +62,47 @@ function App() {
   // Ref to store the realtime channel
   const channelRef = useRef(null);
 
+  // --- Redux State ---
+  const dispatch = useDispatch();
+  const session = useSelector(selectSession); // Get session from Redux store
+  const user = useSelector(selectUser); // <<< Get user object from Redux store
+  const authLoading = useSelector(selectAuthLoading);
+  const authError = useSelector(selectAuthError); // Get auth-specific error
+
+  // --- Auth Listener -> Dispatch to Redux ---
+  useEffect(() => {
+    // Dispatch action to get initial session state
+    dispatch(getSessionThunk());
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        console.log("Supabase auth event -> dispatching setSession:", _event, session);
+        // Dispatch action to update Redux store when auth state changes
+        dispatch(setSession(session));
+      }
+    );
+
+    return () => {
+      if (authListener?.subscription) {
+        console.log("Unsubscribing from auth listener");
+        authListener.subscription.unsubscribe();
+      }
+    };
+  }, [dispatch]); // Add dispatch to dependency array
+
+  // --- Display Auth Error (from Redux) ---
+  useEffect(() => {
+    if (authError) {
+      // Use the local setError to display the auth error in the UI
+      // Alternatively, render authError directly in the JSX
+      setError(`Authentication Error: ${authError}`);
+      // Optionally dispatch an action to clear the Redux error after showing it
+      // dispatch(clearAuthError());
+    }
+    // We might not want to clear the local error here if authError becomes null
+    // because there might be other non-auth errors in the local `error` state.
+  }, [authError]); // Dependency on authError from Redux
+
   // --- Configuration Check & Unmount Cleanup ---
   useEffect(() => {
     if (!import.meta.env.VITE_SUPABASE_URL ||
@@ -86,32 +140,38 @@ function App() {
   }, [timerId]); // Dependency ensures cleanup runs if timerId changes
 
   // --- Database Interaction (createInitialRequestRecord, updateRequestRecord) ---
-  // Keep these functions exactly as they were in the secure Stripe version.
   const createInitialRequestRecord = useCallback(async (uploadedFile, pageCount) => {
-     // ... (same as before)
-     try {
+    try {
+      // Prepare data, including user_id if available
+      const insertData = {
+        file_name: uploadedFile.name,
+        file_size: uploadedFile.size,
+        page_count: pageCount,
+        payment_status: 'pending',
+        parsing_status: 'pending',
+        user_id: user?.id || null, // <<< Add user ID here if user exists
+      };
+
+      console.log("Inserting request data:", insertData);
+
       const { data, error: dbError } = await supabase
         .from('requests')
-        .insert({
-          file_name: uploadedFile.name,
-          file_size: uploadedFile.size,
-          page_count: pageCount, // Add page_count here
-          payment_status: 'pending', // Initial status before payment process starts
-          parsing_status: 'pending',
-        })
+        .insert(insertData)
         .select('id')
         .single();
 
       if (dbError) throw dbError;
       if (!data || !data.id) throw new Error("Failed to create request record or retrieve its ID.");
-      console.log('Initial request record created with ID:', data.id);
+
+      console.log('Initial request record created with ID:', data.id, 'for user:', user?.id);
       return data.id;
     } catch (err) {
       console.error('Error creating initial request record:', err);
+      // Use local setError for UI feedback
       setError(`Database error: ${err.message}. Could not initiate request.`);
       return null;
     }
-  }, []);
+  }, [user]); // <<< Added user dependency
 
   const updateRequestRecord = useCallback(async (requestId, updateData) => {
     // ... (same as before)
@@ -592,7 +652,6 @@ function App() {
                   if (nextTime <= 0) {
                       clearInterval(newTimerId); // Stop timer when it reaches zero
                       setTimerId(null); // Clear the timerId state
-                      // Optionally update message: setLoadingMessage("Parsing taking longer than expected...");
                       return 0;
                   }
                   return nextTime;
@@ -600,7 +659,6 @@ function App() {
           }, 1000);
           setTimerId(newTimerId); // Store the new interval ID
           console.log(`Started parsing timer ${newTimerId} for ${estimatedDurationMs}ms`);
-          // --- Timer End ---
 
           // Do NOT stop loading here. The Realtime listener will handle it.
           setIsLoading(true);
@@ -798,14 +856,71 @@ function App() {
   const showPlaceholderPreview = !showNormalResults && filePreviewUrl && !showTestDataResults;
   const showTestPlaceholderPreview = !showTestDataResults && testFilePreviewUrl;
 
-  // --- Render Logic ---
+  // --- OAuth Sign In Handler -> Dispatch Thunk ---
+  const handleOAuthSignIn = async (provider) => {
+    setError(''); // Clear local error UI
+    console.log(`Dispatching signInWithOAuthThunk for ${provider}...`);
+    // Dispatch the async thunk - error/loading handled by slice/selectors
+    dispatch(signInWithOAuthThunk({ provider }));
+    // No need to handle error locally here unless you want specific UI feedback *during* the thunk call
+    // The authError selector will update if the thunk rejects.
+  };
+
+  // --- Sign Out Handler -> Dispatch Thunk ---
+  const handleSignOut = async () => {
+    setError(''); // Clear local error UI
+    console.log("Dispatching signOutThunk...");
+    // Dispatch the async thunk
+    dispatch(signOutThunk());
+    // Reset local app state if needed AFTER sign out is confirmed (listener will update session)
+    resetState(); // Keep resetting local state
+  };
+
+  // --- Render Logic (Use Redux session) ---
   return (
     <div className="container">
-      <h1>Bank Statement Parser MVP</h1>
-      <p>Upload PDF, pay securely with Crypto via NowPayments, get results.</p>
-      {isDevelopment && <p className="warning-message"><strong>Development Mode Active:</strong> Payment simulation enabled.</p>}
-      <p className="info-message">Note: Crypto payments require network confirmations and may take some time after you send funds.</p>
+      {/* Header with Auth Buttons */}
+      <header className="app-header">
+        <h1>Bank Statement Parser</h1>
+        <div className="auth-buttons">
+          {!session ? ( // Use session from Redux store
+            <>
+              <button
+                onClick={() => handleOAuthSignIn('google')}
+                className="auth-button google"
+                disabled={authLoading === 'pending'} // Disable while auth is loading
+              >
+                {authLoading === 'pending' ? 'Signing In...' : 'Sign In with Google'}
+              </button>
+              <button
+                onClick={() => handleOAuthSignIn('facebook')}
+                className="auth-button facebook"
+                disabled={authLoading === 'pending'} // Disable while auth is loading
+              >
+                 {authLoading === 'pending' ? 'Signing In...' : 'Sign In with Facebook'}
+              </button>
+            </>
+          ) : (
+            <div className="user-info">
+              <span>Welcome, {session.user?.email || 'User'}!</span>
+              <button
+                 onClick={handleSignOut}
+                 className="auth-button sign-out"
+                 disabled={authLoading === 'pending'} // Disable while auth is loading
+               >
+                {authLoading === 'pending' ? 'Signing Out...' : 'Sign Out'}
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
 
+      {/* Main Content - Conditionally render based on session? Or allow usage without login? */}
+      {/* Decide if the core functionality requires login. For now, allow access */}
+      {/* <main className={!session ? 'content-disabled' : ''}> */}
+       <main>
+
+      <h2>Upload Your Bank Statement</h2>
       {/* File Upload - Removed isLoading class */}
       <div className="upload-section">
          {paymentStatus !== 'succeeded' ? (
@@ -1018,7 +1133,10 @@ function App() {
           </div>
         </div>
       </div>
-    </div>
+
+      </main> {/* End Main Content */}
+
+    </div> // End Container
   );
 }
 
