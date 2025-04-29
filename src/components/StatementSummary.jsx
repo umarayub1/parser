@@ -19,8 +19,26 @@ const formatCurrency = (amount) => {
 };
 
 function StatementSummary({ metaData }) {
+  // If no metaData, render the placeholder structure
   if (!metaData) {
-    return <div className="summary-container">Loading summary...</div>;
+    return (
+      <div className="summary-container">
+        <h3>Account Summary</h3>
+        <div className="summary-grid">
+          <div><strong>Bank:</strong></div>
+          <div><strong>Customer:</strong></div>
+          <div><strong>Account Number:</strong></div>
+          <div><strong>Ending Balance Offset:</strong></div>
+          <div><strong>Starting Statement Date:</strong></div>
+          <div><strong>Ending Statement Date:</strong></div>
+          <div><strong>Starting Balance:</strong></div>
+          <div><strong>Ending Balance:</strong></div>
+          <div><strong>Total Transactions:</strong></div>
+          <div><strong>Credits:</strong></div>
+          <div><strong>Debits:</strong></div>
+        </div>
+      </div>
+    );
   }
 
   const {

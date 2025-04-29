@@ -2,12 +2,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux'; // Import Redux hooks
 import { supabase } from './supabaseClient';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './App.css';
-import StatementSummary from './components/StatementSummary';
-import TransactionsTable from './components/TransactionsTable';
-import BalancesTable from './components/BalancesTable';
-import { PDFDocument } from 'pdf-lib'; // Import pdf-lib
+import RequestsHistoryTable from './components/RequestsHistoryTable'; // <<< Import History Table
 // Import Redux actions and selectors
 import {
   setSession,
@@ -50,7 +47,8 @@ function App() {
   // Added for parsing time estimation
   const [pageCount, setPageCount] = useState(0);
   const [timerId, setTimerId] = useState(null); // Interval ID for countdown
-  const [remainingTime, setRemainingTime] = useState(0); // Remaining time in ms
+  const [createdAtTime, setCreatedAtTime] = useState(null); // <<< Add state for creation time
+  const [now, setNow] = useState(() => Date.now()); // <<< Add state for current time, init once
   const [totalDuration, setTotalDuration] = useState(0); // Total duration in ms
 
   // --- State for Test Upload ---
@@ -69,39 +67,77 @@ function App() {
   const authLoading = useSelector(selectAuthLoading);
   const authError = useSelector(selectAuthError); // Get auth-specific error
 
+  // --- State for Request History ---
+  const [requestsHistory, setRequestsHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(''); // Separate error for history fetching
+
+  const navigate = useNavigate(); // <<< Initialize navigate
+
   // --- Auth Listener -> Dispatch to Redux ---
   useEffect(() => {
-    // Dispatch action to get initial session state
     dispatch(getSessionThunk());
-
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         console.log("Supabase auth event -> dispatching setSession:", _event, session);
-        // Dispatch action to update Redux store when auth state changes
         dispatch(setSession(session));
       }
     );
-
     return () => {
       if (authListener?.subscription) {
         console.log("Unsubscribing from auth listener");
         authListener.subscription.unsubscribe();
       }
     };
-  }, [dispatch]); // Add dispatch to dependency array
+  }, [dispatch]);
 
   // --- Display Auth Error (from Redux) ---
   useEffect(() => {
     if (authError) {
-      // Use the local setError to display the auth error in the UI
-      // Alternatively, render authError directly in the JSX
-      setError(`Authentication Error: ${authError}`);
-      // Optionally dispatch an action to clear the Redux error after showing it
-      // dispatch(clearAuthError());
+      // Use the historyError state or display directly
+      console.error(`Authentication Error: ${authError}`);
+      // You might want a dedicated UI element for auth errors vs history errors
     }
-    // We might not want to clear the local error here if authError becomes null
-    // because there might be other non-auth errors in the local `error` state.
-  }, [authError]); // Dependency on authError from Redux
+  }, [authError]);
+
+  // --- Fetch Request History when user logs in ---
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!user?.id) {
+        setRequestsHistory([]); // Clear history if user logs out
+        return;
+      }
+
+      console.log("Fetching request history for user:", user.id);
+      setHistoryLoading(true);
+      setHistoryError(''); // Clear previous errors
+      try {
+        const { data, error } = await supabase
+          .from('requests')
+          .select('id, created_at, file_name, page_count, payment_status, parsing_status') // Select necessary columns
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }); // Show newest first
+
+        if (error) throw error;
+
+        console.log("Fetched history:", data);
+        setRequestsHistory(data || []);
+      } catch (err) {
+        console.error("Error fetching request history:", err);
+        setHistoryError(`Failed to load history: ${err.message}`);
+        setRequestsHistory([]); // Clear history on error
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    fetchHistory();
+
+    // Optional: Set up a realtime subscription to the requests table for the user?
+    // This could update the table automatically when a request's status changes.
+    // Consider performance implications if the user has many requests.
+
+  }, [user]); // Re-fetch when user object changes (login/logout)
 
   // --- Configuration Check & Unmount Cleanup ---
   useEffect(() => {
@@ -262,7 +298,10 @@ function App() {
                  
                  // --- Handle Parsing Status Updates --- 
                  const currentParsingStatus = updatedRequest.parsing_status;
-                 setParsingStatus(currentParsingStatus);
+                 // Only update parsingStatus if it's not empty (prevents resetting our local state)
+                 if (currentParsingStatus && currentParsingStatus !== '') {
+                     setParsingStatus(currentParsingStatus);
+                 }
                  // Clear timer and reset related state when parsing finishes or errors
                  const clearTimer = () => {
                     if (timerId) {
@@ -270,7 +309,7 @@ function App() {
                         clearInterval(timerId);
                         setTimerId(null);
                     }
-                    setRemainingTime(0);
+                    setCreatedAtTime(null);
                     setTotalDuration(0);
                  }
 
@@ -331,7 +370,6 @@ function App() {
                 console.log(`Realtime channel subscribed successfully for ${currentRequestId}`);
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || err) {
                 console.error('Realtime subscription error:', status, err);
-                setError("Realtime connection issue. Status updates might be delayed. Please refresh if needed.");
                 // Potentially stop loading/timer if connection fails critically?
                 // setIsLoading(false); 
                 // if (parsingTimerRef.current) clearInterval(parsingTimerRef.current);
@@ -606,7 +644,7 @@ function App() {
           clearInterval(timerId);
           setTimerId(null);
       }
-      setRemainingTime(0);
+      setCreatedAtTime(null);
       setTotalDuration(0);
 
       try {
@@ -617,7 +655,8 @@ function App() {
 
           // store the path in the request record
           await updateRequestRecord(currentRequestId, {
-            storage_path: filePath
+            storage_path: filePath,
+            parsing_status: 'initiated' // Add this to indicate parsing has started
           });
 
           const { error: uploadError } = await supabase
@@ -641,29 +680,39 @@ function App() {
           
           console.log("Parse function invoked successfully. Waiting for Realtime status update...");
 
-          // --- Start Countdown Timer ---
+          // --- Fetch created_at time for accurate timer ---
+          const { data: requestDetails, error: fetchError } = await supabase
+            .from('requests')
+            .select('created_at')
+            .eq('id', currentRequestId)
+            .single();
+
+          if (fetchError || !requestDetails) {
+              console.warn("Could not fetch created_at for timer, using fallback.", fetchError?.message);
+              setCreatedAtTime(Date.now()); // Fallback to current time if fetch fails
+          } else {
+              setCreatedAtTime(new Date(requestDetails.created_at).getTime());
+          }
+          // --- End Fetch created_at ---
+
+
+          // --- Start Countdown Timer (using 'now' state) ---
           const estimatedDurationMs = pageCount > 0 ? pageCount * 20 * 1000 : 3 * 60 * 1000; // Estimate 20 s/page, fallback 3 min
           setTotalDuration(estimatedDurationMs);
-          setRemainingTime(estimatedDurationMs);
 
+          // Start interval to update 'now' state every second
           const newTimerId = setInterval(() => {
-              setRemainingTime(prevTime => {
-                  const nextTime = prevTime - 1000;
-                  if (nextTime <= 0) {
-                      clearInterval(newTimerId); // Stop timer when it reaches zero
-                      setTimerId(null); // Clear the timerId state
-                      return 0;
-                  }
-                  return nextTime;
-              });
+              setNow(Date.now());
           }, 1000);
           setTimerId(newTimerId); // Store the new interval ID
-          console.log(`Started parsing timer ${newTimerId} for ${estimatedDurationMs}ms`);
+          console.log(`Started 'now' update timer ${newTimerId} for request ${currentRequestId}`);
 
-          // Do NOT stop loading here. The Realtime listener will handle it.
+          // CRITICAL: Ensure loading state stays active during the entire parsing process
           setIsLoading(true);
           // Update loading message - timer will be displayed separately
           setLoadingMessage(`Parsing in progress...`);
+          // Update parsingStatus to ensure UI reflects active parsing
+          setParsingStatus('processing');
 
       } catch (err) {
           console.error('Error during parsing initiation:', err);
@@ -673,7 +722,7 @@ function App() {
           // Clear timer if initiation fails
           if (timerId) clearInterval(timerId);
           setTimerId(null);
-          setRemainingTime(0);
+          setCreatedAtTime(null);
           setTotalDuration(0);
           // Optionally update DB status to error here if initiation failed badly
           if (currentRequestId) {
@@ -789,7 +838,7 @@ function App() {
          clearInterval(timerId);
          setTimerId(null);
      }
-     setRemainingTime(0); // Reset timer display state
+     setCreatedAtTime(null);
      setTotalDuration(0);
 
      // Revoke previous object URLs if they exist
@@ -876,7 +925,12 @@ function App() {
     resetState(); // Keep resetting local state
   };
 
-  // --- Render Logic (Use Redux session) ---
+  // --- New Request Navigation ---
+  const handleCreateNewRequest = () => {
+    navigate('/new-request'); // Navigate to the new route
+  };
+
+  // --- Render Logic (Dashboard View) ---
   return (
     <div className="container">
       {/* Header with Auth Buttons */}
@@ -890,14 +944,12 @@ function App() {
                 className="auth-button google"
                 disabled={authLoading === 'pending'} // Disable while auth is loading
               >
-                {authLoading === 'pending' ? 'Signing In...' : 'Sign In with Google'}
-              </button>
-              <button
-                onClick={() => handleOAuthSignIn('facebook')}
-                className="auth-button facebook"
-                disabled={authLoading === 'pending'} // Disable while auth is loading
-              >
-                 {authLoading === 'pending' ? 'Signing In...' : 'Sign In with Facebook'}
+                <img 
+                  src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" 
+                  alt="Google logo" 
+                  className="google-logo" 
+                />
+                <span>{authLoading === 'pending' ? 'Continuing...' : 'Continue with Google'}</span>
               </button>
             </>
           ) : (
@@ -915,225 +967,38 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content - Conditionally render based on session? Or allow usage without login? */}
-      {/* Decide if the core functionality requires login. For now, allow access */}
-      {/* <main className={!session ? 'content-disabled' : ''}> */}
-       <main>
-
-      <h2>Upload Your Bank Statement</h2>
-      {/* File Upload - Removed isLoading class */}
-      <div className="upload-section">
-         {paymentStatus !== 'succeeded' ? (
-           <>
-             <label htmlFor="file-upload" className={`custom-file-upload ${isLoading ? 'disabled' : ''}`}>
-               {file ? `Selected: ${file.name}` : '1. Choose PDF File'}
-             </label>
-             <input
-               id="file-upload"
-               type="file"
-               accept="application/pdf"
-               onChange={handleFileChange}
-               disabled={isLoading}
-             />
-           </>
-         ) : (
-           <div className="locked-file">
-             <p>✅ {file.name}</p>
-           </div>
-         )}
-        {/* Pay or Parse Button */}
-        {!needsParsingTrigger && paymentStatus !== 'succeeded' && (
-            <button
-              onClick={handlePayment}
-              disabled={!file || isLoading || ['pending_creation', 'waiting', 'confirming', 'confirmed', 'sending'].includes(paymentStatus)}
-              className="cta-button"
-            >
-              {isLoading && paymentStatus === 'pending_creation' ? 'Creating Invoice...' : '2. Pay with Crypto'}
-            </button>
-        )}
-        {/* Simulate Button (Dev Only) */}
-        {isDevelopment && showSimulateButton && !isLoading && (
-                     <button onClick={handleSimulatePayment} className="cta-button simulate-button">
-                        ⚡ Simulate Payment Success (Dev)
-                    </button>
-        )}
-        {needsParsingTrigger && file && paymentStatus === 'succeeded' && (
-             <button
-              onClick={triggerParsing}
-              disabled={isLoading || !file}
-              className="cta-button parse-button"
-            >
-              {isLoading ? 'Parsing...' : '3. Start Parsing'}
-            </button>
-        )}
-      </div>
-
-      {/* Dev Mode: Display Invoice URL if available */}
-      {isDevelopment && nowPaymentsUrl && showSimulateButton && (
-        <div className='dev-info'>
-            <p>Dev: Invoice created. You can simulate success above, or pay manually:</p>
-            <a href={nowPaymentsUrl} target="_blank" rel="noopener noreferrer" style={{wordBreak: 'break-all'}}>{nowPaymentsUrl}</a>
-        </div>
-      )}
-
-      {/* User Messages */}
-      {error && <p className="error-message">Error: {error}</p>}
-      {paymentStatus === 'canceled' && <p className="info-message">Payment was canceled. Select a file and try again.</p>}
-      {paymentStatus === 'expired' && <p className="warning-message">The payment invoice expired. Please try again.</p>}
-      {paymentStatus === 'failed' && <p className="error-message">Payment failed. Please check NowPayments or try again.</p>}
-      {paymentStatus === 'waiting' && !isLoading && ( // Show only if not loading (e.g., in dev mode waiting for simulation click)
-                 <p className="info-message">Invoice created. Please proceed with payment {isDevelopment ? 'or simulation' : ''}.</p>
-      )}
-      {paymentStatus === 'succeeded' && !parsedData && !isLoading && !error && needsParsingTrigger && file && (
-          <p className="success-message">Payment confirmed! Click "Start Parsing".</p>
-      )}
-      {paymentStatus === 'succeeded' && !parsedData && !isLoading && !error && needsParsingTrigger && !file && (
-          <p className="warning-message">Payment confirmed! Please re-select the PDF file, then click "Start Parsing".</p>
-      )}
-      {/* Add new success message for completed parsing */}
-      {parsedData && !isLoading && !error && (
-          <div className="success-message-container">
-              <p className="success-message">✅ Parsing completed successfully!</p>
-          </div>
-      )}
-      
-      {/* Add loading message that includes the permanent link */}
-      {isLoading && (parsingStatus === 'processing' || parsingStatus === 'success') && currentRequestId && (
-        <div className="parsing-link-info">
-          <p>While parsing continues, you can also <Link to={`/requests/${currentRequestId}`} target="_blank" rel="noopener noreferrer">view your request page</Link> to check the status.</p>
-        </div>
-      )}
-
-      {/* Inline Loading Indicator Area */}
-      {isLoading && (
-          <div className="loading-message-container"> {/* New container class */}
-              {/* Removed Progress Circle Logic */}
-                <div className="spinner"></div>
-              <p>{loadingMessage || 'Processing...'}</p>
-
-              {/* Show progress bar and timer only during active parsing */}
-              {loadingMessage.startsWith('Parsing in progress') && totalDuration > 0 && (
-                <div className="progress-timer">
-                  <progress max={totalDuration} value={totalDuration - remainingTime}></progress>
-                  <p className="completion-time">
-                      Estimated time remaining: {formatTime(remainingTime)}
-                  </p>
-                </div>
-              )}
-
-               {/* Simpler message for payment waiting */}
-               {['waiting', 'confirming', 'confirmed', 'sending'].includes(paymentStatus) && !loadingMessage.startsWith('Parsing in progress') && (
-                  <p className="completion-time">Waiting for payment confirmation...</p>
-              )}
-          </div>
-      )}
-
-      {/* ---- Test Upload Section ---- */}
-      {isDevelopment && (
-        <div className="test-upload-section">
-          <h4>Quick Test Preview</h4>
-          <p>Upload a PDF and its corresponding parsed JSON to preview the layout.</p>
-          <div className="test-inputs">
-            <label htmlFor="test-pdf-upload" className={`custom-file-upload ${isLoading ? 'disabled' : ''}`}>
-              {testPdfFileName ? `Test PDF: ${testPdfFileName}` : 'Choose Test PDF'}
-            </label>
-            <input
-              id="test-pdf-upload"
-              type="file"
-              accept="application/pdf"
-              onChange={handleTestFileChange}
-              disabled={isLoading}
-            />
-            <label htmlFor="test-json-upload" className={`custom-file-upload ${isLoading ? 'disabled' : ''}`}>
-              {testJsonFileName ? `Test JSON: ${testJsonFileName}` : 'Choose Test JSON'}
-            </label>
-            <input
-              id="test-json-upload"
-              type="file"
-              accept="application/json,.json"
-              onChange={handleTestJsonChange}
-              disabled={isLoading}
-            />
-             {(testFilePreviewUrl || testJsonData) && (
-                   <button onClick={resetState} className="cta-button reset-button" disabled={isLoading}>
-                      Reset Test
-                   </button>
-              )}
-          </div>
-        </div>
-      )}
-
-      {/* Always render the results sections, regardless of data status. Use empty data when none exists. - Removed isLoading class */}
-      <div className="results-section">
-        <div className="results-header">
-          <h2>Results {showTestDataResults ? '(Test Preview)' : ''}</h2>
-          <div className="results-actions">
-            {(showNormalResults || showTestDataResults) && (
-              <button onClick={handleDownloadJson} className="cta-button download-button">
-                Download JSON
+      {/* Main Content - History View */}
+      <main>
+        {session ? (
+          <>
+            <div className="history-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <button onClick={handleCreateNewRequest} className="cta-button">
+                + Create New Request
               </button>
-            )}
-            {currentRequestId && showNormalResults && (
-              <Link to={`/requests/${currentRequestId}`} className="cta-button view-button" target="_blank" rel="noopener noreferrer">
-                View Page
-              </Link>
-            )}
-          </div>
-        </div>
-        
-        <div className="summary-section">
-          {(showNormalResults || showTestDataResults) ? (
-            <StatementSummary metaData={dataToShow.meta_data} />
-          ) : (
-            <div className="summary-container">
-              <h3>Account Summary</h3>
-              <div className="summary-grid">
-                <div><strong>Bank:</strong></div>
-                <div><strong>Customer:</strong></div>
-                <div><strong>Account Number:</strong></div>
-                <div><strong>Offset:</strong></div>
-                <div><strong>Starting Statement Date:</strong></div>
-                <div><strong>Ending Statement Date:</strong></div>
-                <div><strong>Starting Balance:</strong></div>
-                <div><strong>Ending Balance:</strong></div>
-                <div><strong>Total Transactions:</strong></div>
-                <div><strong>Credits:</strong></div>
-                <div><strong>Debits:</strong></div>
-              </div>
             </div>
-          )}
-        </div>
-
-        <div className="results-content">
-          <div className="pdf-column">
-            {previewUrlToShow ? (
-              <iframe
-                src={previewUrlToShow}
-                width="100%"
-                height="800px"
-                title="PDF Preview"
-              />
-            ) : (
-              <div className="empty-preview">
-                <p>PDF preview will appear here after uploading</p>
-              </div>
-            )}
+            {authError && <p className="error-message">Authentication Error: {authError}</p>}
+            {historyError && <p className="error-message">{historyError}</p>}
+            <RequestsHistoryTable requests={requestsHistory} isLoading={historyLoading} />
+          </>
+        ) : (
+          <div className="signed-out-message">
+            <h2>Welcome to the Bank Statement Parser</h2>
+            <p>Please sign in with Google to view your request history or create a new request.</p>
+            <button
+                onClick={() => handleOAuthSignIn('google')}
+                className="auth-button google large" // Add large class if needed
+                disabled={authLoading === 'pending'}
+              >
+                <img
+                  src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg"
+                  alt="Google logo"
+                  className="google-logo"
+                />
+                <span>{authLoading === 'pending' ? 'Continuing...' : 'Continue with Google'}</span>
+              </button>
+             {authError && <p className="error-message" style={{marginTop: '10px'}}>Authentication Error: {authError}</p>}
           </div>
-          <div className="right-column">
-            <div className="transactions-column">
-              <TransactionsTable 
-                transactions={(showNormalResults || showTestDataResults) ? dataToShow.transactions_data : []} 
-              />
-            </div>
-            <div className="balances-section">
-              <BalancesTable 
-                balances={(showNormalResults || showTestDataResults) ? dataToShow.balances : []} 
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
+        )}
       </main> {/* End Main Content */}
 
     </div> // End Container

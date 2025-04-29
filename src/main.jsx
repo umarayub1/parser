@@ -6,6 +6,7 @@ import { store } from './store/store'
 import './index.css'
 import App from './App.jsx'
 import RequestPage from './components/RequestPage'
+import NewRequestPage from './pages/NewRequestPage'
 
 const router = createBrowserRouter([
   {
@@ -15,6 +16,10 @@ const router = createBrowserRouter([
   {
     path: '/requests/:requestId',
     element: <RequestPage />
+  },
+  {
+    path: '/new-request',
+    element: <NewRequestPage />
   }
 ]);
 

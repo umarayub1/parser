@@ -641,26 +641,29 @@ input[type="file"]:disabled + label {
   font-size: 0.9rem;
   font-weight: 500;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  display: inline-flex; /* Use flexbox for alignment */
+  align-items: center;   /* Center items vertically */
+  gap: 0.5rem;          /* Add space between logo and text */
 }
 
 .auth-button.google {
-  background-color: #db4437;
-  color: white;
+  /* background-color: #db4437; */ /* Original red background */
+  background-color: #ffffff; /* White background */
+  color: #333333; /* Darker text color */
+  border: 1px solid #cccccc; /* Light gray border */
 }
 
 .auth-button.google:hover {
-  background-color: #c23321;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* background-color: #c23321; */ /* Original darker red */
+  background-color: #f5f5f5; /* Slightly darker background on hover */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle shadow */
 }
 
-.auth-button.facebook {
-  background-color: #4267B2;
-  color: white;
-}
-
-.auth-button.facebook:hover {
-  background-color: #365899;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+/* Style for the Google logo image */
+.google-logo {
+  height: 18px; /* Adjust size as needed */
+  width: 18px;  /* Adjust size as needed */
+  vertical-align: middle; /* Helps with alignment */
 }
 
 .user-info {
