@@ -27,22 +27,119 @@ serve(async (req: Request) => {
       throw new Error("Missing required environment variables for parsing submission.");
     }
 
-    // 1. Update DB Status: Submitting
+    // 1. Get user ID and page count from the request record
+    const { data: requestData, error: requestError } = await supabaseAdmin
+      .from('requests')
+      .select('user_id, page_count')
+      .eq('id', requestId)
+      .single();
+    
+    if (requestError || !requestData || !requestData.user_id) {
+      throw new Error(`Failed to retrieve user/request information: ${requestError?.message || 'No user ID associated with this request'}`);
+    }
+
+    if (requestData.page_count === null || requestData.page_count === undefined || requestData.page_count <= 0) {
+      await supabaseAdmin
+        .from('requests')
+        .update({ 
+          parsing_status: 'error', 
+          error_message: 'Invalid or missing page count for the document.' 
+        })
+        .eq('id', requestId);
+      throw new Error('Invalid or missing page count for the document.');
+    }
+
+    const creditCost = requestData.page_count * 0.1;
+    
+    // 2. Check if user has enough credits
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('credits_remaining')
+      .eq('id', requestData.user_id)
+      .single();
+    
+    if (profileError) {
+      throw new Error(`Failed to retrieve user profile: ${profileError.message}`);
+    }
+    
+    if (!profileData || profileData.credits_remaining < creditCost) {
+       const errorMessage = `Insufficient credits. This action requires ${creditCost} credits, but you only have ${profileData?.credits_remaining || 0}. Please purchase more credits.`;
+      // Update request status to error due to insufficient credits
+      await supabaseAdmin
+        .from('requests')
+        .update({ 
+          parsing_status: 'error', 
+          error_message: errorMessage 
+        })
+        .eq('id', requestId);
+      
+      throw new Error(errorMessage);
+    }
+
+    // 3. Create payment record
+    const { error: paymentError } = await supabaseAdmin
+      .from('payments')
+      .insert({
+        user_id: requestData.user_id,
+        amount: creditCost,
+        status: 'completed',
+        metadata: { 
+          requestId: requestId, 
+          type: 'parsing_fee', 
+          pages: requestData.page_count,
+          rate_per_page: 0.1
+        }
+      });
+
+    if (paymentError) {
+      console.error(`Failed to create payment record for request ${requestId}: ${paymentError.message}`);
+      await supabaseAdmin
+        .from('requests')
+        .update({ 
+          parsing_status: 'error', 
+          error_message: `Internal error: Failed to record credit deduction (Code: P1). ${paymentError.message}` 
+        })
+        .eq('id', requestId);
+      throw new Error(`Internal error: Failed to record credit deduction (Code: P1). ${paymentError.message}`);
+    }
+
+    // 4. Deduct the calculated credits from the user's account
+    const { error: creditDeductionError } = await supabaseAdmin
+      .from('profiles')
+      .update({ 
+        credits_remaining: profileData.credits_remaining - creditCost,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', requestData.user_id);
+
+    if (creditDeductionError) {
+        console.error(`Failed to deduct credits for user ${requestData.user_id}: ${creditDeductionError.message}`);
+        await supabaseAdmin
+            .from('requests')
+            .update({
+                parsing_status: 'error',
+                error_message: `Internal error: Failed to deduct credits after recording payment (Code: P2). ${creditDeductionError.message}`
+            })
+            .eq('id', requestId);
+        throw new Error(`Internal error: Failed to deduct credits (Code: P2). ${creditDeductionError.message}`);
+    }
+
+    // 4. Update DB Status: Submitting
     await supabaseAdmin.from('requests').update({ parsing_status: 'submitting' }).eq('id', requestId);
 
-    // 2. Download file from Storage (same as before)
+    // 5. Download file from Storage (same as before)
     console.log(`SUBMIT: Downloading ${storagePath} for request ${requestId}`);
     const { data: blobData, error: downloadError } = await supabaseAdmin.storage.from('statement-uploads').download(storagePath);
     if (downloadError) throw new Error(`Storage download failed: ${downloadError.message}`);
     if (!blobData) throw new Error("Downloaded file data is empty.");
     console.log(`SUBMIT: File downloaded successfully.`);
 
-    // 3. Prepare form data (same as before)
+    // 6. Prepare form data (same as before)
     const formData = new FormData();
     const originalFilename = storagePath.split('/').pop() || 'file.pdf'; // Extract filename from path
     formData.append('file', blobData, originalFilename);
 
-    // 4. Construct Callback URL and Headers
+    // 7. Construct Callback URL and Headers
     // Option A: Simple callback URL (requestId needs to be in callback body)
     const callbackUrl = callbackHandlerUrl;
     // Option B: Embed requestId in URL (if handler can parse it)
@@ -56,7 +153,7 @@ serve(async (req: Request) => {
         'X-Request-ID': requestId // Could also pass requestId this way if needed
     });
 
-    // 5. Call the external parsing API with callback info
+    // 8. Call the external parsing API with callback info
     console.log(`SUBMIT: Calling ${parsingSubmitUrl} with callback to ${callbackUrl}`);
     // Append callback params to FormData (API specific - check its docs)
     // Might need to be query params instead? Adjust as needed.
@@ -76,7 +173,7 @@ serve(async (req: Request) => {
 
     console.log(`SUBMIT: Parsing API response status: ${response.status}`);
 
-    // 6. Handle IMMEDIATE response (Check if job was accepted)
+    // 9. Handle IMMEDIATE response (Check if job was accepted)
     if (response.status < 200 || response.status >= 300) { // Check for 2xx success status
         const errorBody = await response.text();
         console.error(`SUBMIT: Parsing API submission error (${response.status}): ${errorBody}`);
@@ -90,7 +187,7 @@ serve(async (req: Request) => {
         console.log("SUBMIT: API immediate response body:", responseBody);
      } catch(e) { console.log("SUBMIT: API returned non-JSON success response."); }
 
-    // 7. Update DB: Mark as PROCESSING (waiting for callback)
+    // 10. Update DB: Mark as PROCESSING (waiting for callback)
     console.log(`SUBMIT: Job submitted successfully for Request ID: ${requestId}. Waiting for callback.`);
     await supabaseAdmin
       .from('requests')
@@ -101,7 +198,7 @@ serve(async (req: Request) => {
        })
       .eq('id', requestId);
 
-    // 8. Return success to frontend quickly
+    // 11. Return success to frontend quickly
     return new Response(
       JSON.stringify({ success: true, message: 'Parsing job submitted, processing started.' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 } // Use 200 OK
@@ -111,6 +208,22 @@ serve(async (req: Request) => {
       // ... existing error handling ...
       console.error('Error in submit-parsing-job function:', error);
       // Try to update DB status to error if possible
+      try {
+        // Extract requestId from the error context if possible
+        const { requestId } = await req.json().catch(() => ({ requestId: null }));
+        if (requestId) {
+          await supabaseAdmin
+            .from('requests')
+            .update({ 
+              parsing_status: 'error', 
+              error_message: error.message || 'Unknown error during parsing'
+            })
+            .eq('id', requestId);
+        }
+      } catch (dbError) {
+        console.error('Failed to update request error status:', dbError);
+      }
+      
       return new Response(
         JSON.stringify({ success: false, message: error.message }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 } // Use 500 Internal Server Error

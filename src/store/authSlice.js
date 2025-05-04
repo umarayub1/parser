@@ -22,18 +22,30 @@ export const signInWithOAuthThunk = createAsyncThunk(
   'auth/signInWithOAuth',
   async ({ provider }, { rejectWithValue }) => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      console.log(`Starting OAuth sign-in with ${provider}...`);
+      
+      // Get current URL for redirect
+      const redirectUrl = window.location.origin;
+      console.log(`Setting redirect URL to: ${redirectUrl}`);
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider,
         options: {
-          // redirectTo: window.location.origin, // Optional redirect
+          redirectTo: redirectUrl,
         },
       });
-      if (error) throw error;
-      // No return value needed, Supabase handles redirect
-      console.log(`Redux: Sign in with ${provider} initiated.`);
-      return null; // Indicate success, though redirect handles flow
+      
+      if (error) {
+        console.error(`OAuth sign-in error:`, error);
+        throw error;
+      }
+      
+      console.log(`OAuth sign-in initiated:`, data);
+      
+      // If we get here, the user will be redirected to the OAuth provider
+      return null;
     } catch (error) {
-      console.error(`Redux: OAuth sign in error (${provider}):`, error);
+      console.error(`Redux: OAuth sign-in error (${provider}):`, error);
       return rejectWithValue(error.message);
     }
   }

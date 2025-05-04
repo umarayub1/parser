@@ -1,32 +1,20 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { store } from './store/store'
-import './index.css'
 import App from './App.jsx'
+import './index.css'
 import RequestPage from './components/RequestPage'
 import NewRequestPage from './pages/NewRequestPage'
+import CryptoTopUpPage from './pages/CryptoTopUpPage'
 
-const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <App />
-  },
-  {
-    path: '/requests/:requestId',
-    element: <RequestPage />
-  },
-  {
-    path: '/new-request',
-    element: <NewRequestPage />
-  }
-]);
-
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
     <Provider store={store}>
-      <RouterProvider router={router} />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </Provider>
-  </StrictMode>,
+  </React.StrictMode>,
 )

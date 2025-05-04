@@ -19,62 +19,84 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { requestId } = await req.json();
+    const { requestId, type = 'parse', amount } = await req.json();
     if (!requestId) throw new Error("Request ID is required.");
 
-    // --- Fetch page_count for the request ---
-    const { data: requestData, error: fetchError } = await supabaseAdmin
-      .from('requests')
-      .select('page_count') // Assuming a 'page_count' column exists
-      .eq('id', requestId)
-      .single();
+    let priceAmountString = '';
+    let orderId = requestId;
+    let orderDescription = '';
+    
+    if (type === 'top_up') {
+      // For top-up transactions, use the provided amount
+      if (!amount || amount < 5) throw new Error("Amount must be at least $5 for top-ups");
+      
+      priceAmountString = amount.toFixed(2);
+      orderDescription = `Credit Top-Up ($${priceAmountString})`;
+      
+      // Update the credit transaction record
+      const { error: updateError } = await supabaseAdmin
+        .from('credit_transactions')
+        .update({
+          amount_usd: parseFloat(priceAmountString),
+          payment_status: 'waiting'
+        })
+        .eq('id', requestId);
 
-    if (fetchError) {
-      console.error(`Error fetching request details for ${requestId}:`, fetchError);
-      throw new Error(`Could not retrieve request details: ${fetchError.message}`);
+      if (updateError) {
+        console.error(`Error updating credit transaction for ${requestId}:`, updateError);
+        throw new Error(`Could not update credit transaction: ${updateError.message}`);
+      }
+    } else {
+      // Original parsing request logic - fetch page count
+      const { data: requestData, error: fetchError } = await supabaseAdmin
+        .from('requests')
+        .select('page_count')
+        .eq('id', requestId)
+        .single();
+
+      if (fetchError) {
+        console.error(`Error fetching request details for ${requestId}:`, fetchError);
+        throw new Error(`Could not retrieve request details: ${fetchError.message}`);
+      }
+      if (!requestData) {
+        throw new Error(`Request record not found for ID: ${requestId}`);
+      }
+
+      const pageCount = requestData.page_count;
+      if (pageCount === null || pageCount === undefined || typeof pageCount !== 'number' || pageCount < 0) {
+          console.warn(`Invalid page_count (${pageCount}) for request ${requestId}. Using minimum price.`);
+      }
+      
+      // Calculate price for parsing
+      const calculatedPrice = Math.max(0.1 * (pageCount > 0 ? pageCount : 0), 2.00); 
+      priceAmountString = calculatedPrice.toFixed(2);
+      orderDescription = `Bank Statement Parsing (${pageCount} pages)`;
     }
-    if (!requestData) {
-      throw new Error(`Request record not found for ID: ${requestId}`);
-    }
 
-    const pageCount = requestData.page_count;
-    if (pageCount === null || pageCount === undefined || typeof pageCount !== 'number' || pageCount < 0) {
-        console.warn(`Invalid page_count (${pageCount}) for request ${requestId}. Using minimum price.`);
-        // Decide how to handle invalid page count - using minimum price here
-    }
-    // --- Calculate Dynamic Price ---
-    // Price is max(0.1 * pageCount, $2.00)
-    // Ensure pageCount is treated as 0 if invalid/null for calculation
-    const calculatedPrice = Math.max(0.1 * (pageCount > 0 ? pageCount : 0), 2.00); 
-    const priceAmountString = calculatedPrice.toFixed(2); // Ensure 2 decimal places
-
-    console.log(`Request ID: ${requestId}, Page Count: ${pageCount}, Calculated Price: $${priceAmountString}`);
-    // --- End Price Calculation ---
-
+    console.log(`Request ID: ${requestId}, Type: ${type}, Price: $${priceAmountString}`);
 
     const apiKey = Deno.env.get('NOWPAYMENTS_API_KEY');
     const ipnCallbackUrl = Deno.env.get('IPN_CALLBACK_URL');
     const appBaseUrl = Deno.env.get('APP_BASE_URL');
-    // const priceAmount = Deno.env.get('PAYMENT_PRICE_AMOUNT'); // No longer used directly
     const priceCurrency = Deno.env.get('PAYMENT_PRICE_CURRENCY');
 
-    if (!apiKey || !ipnCallbackUrl || !appBaseUrl || !priceCurrency) { // Removed priceAmount check
+    if (!apiKey || !ipnCallbackUrl || !appBaseUrl || !priceCurrency) {
          throw new Error("Missing required environment variables for NowPayments invoice creation.");
     }
 
-    const successUrl = `${appBaseUrl}?payment_return=success&request_id=${requestId}`;
-    const cancelUrl = `${appBaseUrl}?payment_return=cancel&request_id=${requestId}`;
+    // Return URLs for both parsing and top-up requests
+    const returnPath = type === 'top_up' ? '/top-up' : '';
+    const successUrl = `${appBaseUrl}${returnPath}?payment_return=success&request_id=${requestId}`;
+    const cancelUrl = `${appBaseUrl}${returnPath}?payment_return=cancel&request_id=${requestId}`;
 
     const invoicePayload = {
-      price_amount: parseFloat(priceAmountString), // Use the calculated price
+      price_amount: parseFloat(priceAmountString),
       price_currency: priceCurrency,
-      order_id: requestId, // Link invoice to our internal request ID
-      // order_description: `Bank Statement Parsing (${pageCount} pages)`, // Optional enhanced description
+      order_id: orderId,
+      order_description: orderDescription,
       ipn_callback_url: ipnCallbackUrl,
-      success_url: successUrl, // Where user returns after potential success
-      cancel_url: cancelUrl,   // Where user returns if they cancel on NowPayments page
-      // is_fee_paid_by_user: true, // Optional: default false
-      // case_sensitive_order_id: false, // default false
+      success_url: successUrl,
+      cancel_url: cancelUrl,
     };
 
     console.log("Creating NowPayments invoice with payload:", invoicePayload);
@@ -104,19 +126,32 @@ serve(async (req: Request) => {
     }
 
     // Update our DB record with the invoice details
-    const { error: dbError } = await supabaseAdmin
-        .from('requests')
+    if (type === 'top_up') {
+      const { error: dbError } = await supabaseAdmin
+        .from('credit_transactions')
         .update({
-            nowpayments_invoice_id: invoiceId,
-            nowpayments_invoice_url: invoiceUrl,
-            payment_status: 'waiting', // User needs to pay
+          nowpayments_invoice_id: invoiceId,
+          nowpayments_invoice_url: invoiceUrl,
+          payment_status: 'waiting',
         })
         .eq('id', requestId);
 
-    if (dbError) {
-        // Log error, but still return URL to user if possible
+      if (dbError) {
+        console.error(`Failed to update credit transaction ${requestId} with invoice details: ${dbError.message}`);
+      }
+    } else {
+      const { error: dbError } = await supabaseAdmin
+        .from('requests')
+        .update({
+          nowpayments_invoice_id: invoiceId,
+          nowpayments_invoice_url: invoiceUrl,
+          payment_status: 'waiting',
+        })
+        .eq('id', requestId);
+
+      if (dbError) {
         console.error(`Failed to update request ${requestId} with invoice details: ${dbError.message}`);
-        // Depending on severity, maybe throw error here instead
+      }
     }
 
     // Return the URL for the user to pay

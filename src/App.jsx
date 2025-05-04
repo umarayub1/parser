@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux'; // Import Redux hooks
 import { supabase } from './supabaseClient';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Routes, Route } from 'react-router-dom';
 import './App.css';
 import RequestsHistoryTable from './components/RequestsHistoryTable'; // <<< Import History Table
+import UserCredits from './components/UserCredits'; // Import UserCredits component
+import RequestPage from './components/RequestPage'; // Import RequestPage component
 // Import Redux actions and selectors
 import {
   setSession,
@@ -17,6 +19,10 @@ import {
   selectAuthLoading,
   selectAuthError
 } from './store/authSlice'; // Adjust path as necessary
+
+// Import pages
+import NewRequestPage from './pages/NewRequestPage';
+import CryptoTopUpPage from './pages/CryptoTopUpPage';
 
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
 
@@ -73,6 +79,7 @@ function App() {
   const [historyError, setHistoryError] = useState(''); // Separate error for history fetching
 
   const navigate = useNavigate(); // <<< Initialize navigate
+  const location = useLocation();
 
   // --- Auth Listener -> Dispatch to Redux ---
   useEffect(() => {
@@ -114,7 +121,7 @@ function App() {
       try {
         const { data, error } = await supabase
           .from('requests')
-          .select('id, created_at, file_name, page_count, payment_status, parsing_status') // Select necessary columns
+          .select('id, created_at, file_name, page_count, parsing_status') // Select necessary columns
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }); // Show newest first
 
@@ -147,6 +154,14 @@ function App() {
        setError("Critical configuration missing in .env file.");
        console.error("ERROR: Missing environment variables!");
     }
+    
+    // Set up a global click listener to verify click events are working
+    const handleDocumentClick = (e) => {
+      console.log('Document click event registered at:', e.target);
+    };
+    
+    document.addEventListener('click', handleDocumentClick);
+    
     // Handle return from NowPayments (doesn't confirm payment, just user action)
     handleNowPaymentsReturn();
 
@@ -160,9 +175,11 @@ function App() {
         console.log("Revoking TEST object URL on unmount:", testFilePreviewUrl);
         URL.revokeObjectURL(testFilePreviewUrl);
       }
+      
+      // Remove click listener
+      document.removeEventListener('click', handleDocumentClick);
     };
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Effect runs only on mount/unmount
+  }, []);
 
   // --- Cleanup Timer on Unmount ---
   useEffect(() => {
@@ -907,22 +924,34 @@ function App() {
 
   // --- OAuth Sign In Handler -> Dispatch Thunk ---
   const handleOAuthSignIn = async (provider) => {
+    console.log(`Sign in button clicked for ${provider}...`);
     setError(''); // Clear local error UI
-    console.log(`Dispatching signInWithOAuthThunk for ${provider}...`);
-    // Dispatch the async thunk - error/loading handled by slice/selectors
-    dispatch(signInWithOAuthThunk({ provider }));
-    // No need to handle error locally here unless you want specific UI feedback *during* the thunk call
-    // The authError selector will update if the thunk rejects.
+    try {
+      console.log(`Dispatching signInWithOAuthThunk for ${provider}...`);
+      // Dispatch the async thunk - error/loading handled by slice/selectors
+      await dispatch(signInWithOAuthThunk({ provider }));
+      console.log(`OAuth sign-in thunk dispatched successfully for ${provider}`);
+    } catch (err) {
+      console.error(`Error during OAuth sign-in dispatch: ${err.message}`);
+      setError(`Authentication error: ${err.message}`);
+    }
   };
 
   // --- Sign Out Handler -> Dispatch Thunk ---
   const handleSignOut = async () => {
+    console.log("Sign out button clicked...");
     setError(''); // Clear local error UI
-    console.log("Dispatching signOutThunk...");
-    // Dispatch the async thunk
-    dispatch(signOutThunk());
-    // Reset local app state if needed AFTER sign out is confirmed (listener will update session)
-    resetState(); // Keep resetting local state
+    try {
+      console.log("Dispatching signOutThunk...");
+      // Dispatch the async thunk
+      await dispatch(signOutThunk());
+      console.log("Sign out thunk dispatched successfully");
+      // Reset local app state if needed AFTER sign out is confirmed (listener will update session)
+      resetState(); // Keep resetting local state
+    } catch (err) {
+      console.error(`Error during sign-out dispatch: ${err.message}`);
+      setError(`Sign out error: ${err.message}`);
+    }
   };
 
   // --- New Request Navigation ---
@@ -930,78 +959,147 @@ function App() {
     navigate('/new-request'); // Navigate to the new route
   };
 
+  // Determine active link
+  const isActive = (path) => {
+    return location.pathname === path;
+  };
+
   // --- Render Logic (Dashboard View) ---
   return (
-    <div className="container">
-      {/* Header with Auth Buttons */}
+    <div className="main-layout">
       <header className="app-header">
-        <h1>Bank Statement Parser</h1>
-        <div className="auth-buttons">
-          {!session ? ( // Use session from Redux store
-            <>
-              <button
-                onClick={() => handleOAuthSignIn('google')}
-                className="auth-button google"
-                disabled={authLoading === 'pending'} // Disable while auth is loading
-              >
-                <img 
-                  src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" 
-                  alt="Google logo" 
-                  className="google-logo" 
-                />
-                <span>{authLoading === 'pending' ? 'Continuing...' : 'Continue with Google'}</span>
-              </button>
-            </>
-          ) : (
-            <div className="user-info">
-              <span>Welcome, {session.user?.email || 'User'}!</span>
-              <button
-                 onClick={handleSignOut}
-                 className="auth-button sign-out"
-                 disabled={authLoading === 'pending'} // Disable while auth is loading
-               >
-                {authLoading === 'pending' ? 'Signing Out...' : 'Sign Out'}
-              </button>
+        <div className="header-content">
+          <div className="logo-container">
+            <Link to="/" className="logo-link">
+              <h1>Bank Parser</h1>
+            </Link>
+          </div>
+          
+          <div className="header-controls">
+            {user && (
+              <div className="nav-links">
+                <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                  </svg>
+                  Dashboard
+                </Link>
+                <Link to="/new-request" className={`nav-link ${isActive('/new-request') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  New Request
+                </Link>
+                <Link to="/crypto-top-up" className={`nav-link ${isActive('/crypto-top-up') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  </svg>
+                  Top Up Credits
+                </Link>
+              </div>
+            )}
+            
+            <div className="auth-section">
+              {user ? (
+                <div className="user-info">
+                  <UserCredits />
+                  <span className="user-email">{user.email}</span>
+                  <button 
+                    className="auth-button sign-out" 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      console.log("Sign out button clicked directly");
+                      handleSignOut();
+                    }} 
+                    disabled={authLoading === 'pending'}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                      <polyline points="16 17 21 12 16 7"></polyline>
+                      <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <div className="auth-buttons">
+                  <button 
+                    className="auth-button google" 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      console.log("Welcome page Google sign-in button clicked directly");
+                      handleOAuthSignIn('google');
+                    }}
+                    disabled={authLoading === 'pending'}
+                  >
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="google-logo" />
+                    Sign in with Google
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </header>
 
-      {/* Main Content - History View */}
-      <main>
-        {session ? (
-          <>
-            <div className="history-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <button onClick={handleCreateNewRequest} className="cta-button">
-                + Create New Request
-              </button>
+      <main className="content-container">
+        {!user ? (
+          <div className="welcome-section">
+            <div className="welcome-content">
+              <h2>Welcome to Bank Statement Parser</h2>
+              <p>Sign in to process your bank statements and extract valuable data.</p>
             </div>
-            {authError && <p className="error-message">Authentication Error: {authError}</p>}
-            {historyError && <p className="error-message">{historyError}</p>}
-            <RequestsHistoryTable requests={requestsHistory} isLoading={historyLoading} />
-          </>
-        ) : (
-          <div className="signed-out-message">
-            <h2>Welcome to the Bank Statement Parser</h2>
-            <p>Please sign in with Google to view your request history or create a new request.</p>
-            <button
-                onClick={() => handleOAuthSignIn('google')}
-                className="auth-button google large" // Add large class if needed
-                disabled={authLoading === 'pending'}
-              >
-                <img
-                  src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg"
-                  alt="Google logo"
-                  className="google-logo"
-                />
-                <span>{authLoading === 'pending' ? 'Continuing...' : 'Continue with Google'}</span>
-              </button>
-             {authError && <p className="error-message" style={{marginTop: '10px'}}>Authentication Error: {authError}</p>}
+            <div className="welcome-features">
+              <div className="feature-card">
+                <div className="feature-icon">📊</div>
+                <h3>Transaction Analysis</h3>
+                <p>Extract and categorize all transactions from your bank statements automatically.</p>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon">🔒</div>
+                <h3>Secure Processing</h3>
+                <p>Your data is processed securely and not stored longer than necessary.</p>
+              </div>
+              <div className="feature-card">
+                <div className="feature-icon">📱</div>
+                <h3>Easy Access</h3>
+                <p>Access your parsed statements from any device with an internet connection.</p>
+              </div>
+            </div>
           </div>
+        ) : (
+          <Routes>
+            <Route 
+              path="/" 
+              element={
+                <div className="dashboard-container">
+                  
+                  <div className="history-section">
+                    {historyError && <div className="error-message">{historyError}</div>}
+                    <RequestsHistoryTable 
+                      requests={requestsHistory} 
+                      isLoading={historyLoading} 
+                    />
+                  </div>
+                </div>
+              } 
+            />
+            <Route path="/new-request" element={<NewRequestPage />} />
+            <Route path="/crypto-top-up" element={<CryptoTopUpPage />} />
+            <Route path="/requests/:id" element={<RequestPage />} />
+          </Routes>
         )}
-      </main> {/* End Main Content */}
-
-    </div> // End Container
+      </main>
+      
+      <footer className="app-footer">
+        <div className="footer-content">
+          <p>&copy; {new Date().getFullYear()} Bank Statement Parser</p>
+        </div>
+      </footer>
+    </div>
   );
 }
 

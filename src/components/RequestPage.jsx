@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectUser, getSessionThunk } from '../store/authSlice';
 import { supabase } from '../supabaseClient';
 import StatementSummary from './StatementSummary';
 import TransactionsTable from './TransactionsTable';
 import BalancesTable from './BalancesTable';
+import UserCredits from './UserCredits';
 import '../App.css';
 
 // Helper function to format time
@@ -15,17 +18,75 @@ function formatTime(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+// ---> Added: Cache helper functions
+const getCachedData = (key) => {
+  try {
+    const cached = sessionStorage.getItem(key);
+    return cached ? JSON.parse(cached) : null;
+  } catch (error) {
+    console.error(`Error reading cache key ${key}:`, error);
+    return null;
+  }
+};
+
+const setCachedData = (key, data) => {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(data));
+  } catch (error) {
+    console.error(`Error writing cache key ${key}:`, error);
+  }
+};
+// <--- End Added
+
 function RequestPage() {
-  const { requestId } = useParams();
+  const { id } = useParams(); // Changed from requestId to id to match the route parameter
+  const requestId = id; // For backward compatibility with existing code
   const navigate = useNavigate();
-  const [request, setRequest] = useState(null);
-  const [parsedData, setParsedData] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const dispatch = useDispatch();
+  const user = useSelector(selectUser);
+  
+  // Check for missing ID early and show a helpful error
+  useEffect(() => {
+    if (!requestId) {
+      console.error("No request ID provided in URL parameters");
+      setError("No request ID provided. Please select a request from the dashboard.");
+      setIsLoading(false);
+    }
+  }, [requestId]);
+  
+  // ---> Modified: Initialize state from cache if available
+  const cacheKeyRequest = `request-${requestId}`;
+  const cacheKeyParsed = `parsed-${requestId}`;
+  const [request, setRequest] = useState(() => getCachedData(cacheKeyRequest));
+  const [parsedData, setParsedData] = useState(() => {
+      const cached = getCachedData(cacheKeyParsed);
+      // Ensure cached parsed data has the expected structure
+      if (cached?.meta_data && cached?.transactions_data) {
+          return cached;
+      }
+      return null; 
+  });
+  // <--- End Modified
+  const [previewUrl, setPreviewUrl] = useState(null); // Don't cache preview URL
+  // ---> Modified: isLoading depends on whether we have *any* request data initially
+  const [isLoading, setIsLoading] = useState(!request); // Start loading only if no cached request
+  // <--- End Modified
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => Date.now());
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const timerIntervalRef = useRef(null);
   const channelRef = useRef(null);
+
+  // Initialize auth on component mount
+  useEffect(() => {
+    const initAuth = async () => {
+      setIsAuthLoading(true);
+      await dispatch(getSessionThunk());
+      setIsAuthLoading(false);
+    };
+    
+    initAuth();
+  }, [dispatch]);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,18 +98,25 @@ function RequestPage() {
         return;
       }
 
-      console.log(`Fetching data for request ID: ${requestId}`);
-      setIsLoading(true);
-      setError('');
-      setParsedData(null);
-      setRequest(null);
+      console.log(`Fetching data for request ID: ${requestId} (Initial load or refresh)`);
+      // Reset error only if not already set from cache issues potentially
+      // setError(''); 
+      // No need to reset parsedData/request here as they might come from cache
 
+      // Revoke previous URL if it exists
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
+        setPreviewUrl(null); 
       }
+      
+      // ---> Added: Set loading true only if we didn't load from cache
+      if (!request) {
+        setIsLoading(true); 
+      }
+      // <--- End Added
 
       try {
+        // Fetch request details regardless of cache to get latest status
         const { data: requestData, error: requestError } = await supabase
           .from('requests')
           .select('*')
@@ -60,9 +128,13 @@ function RequestPage() {
         if (requestError) throw new Error(`Request fetch error: ${requestError.message}`);
         if (!requestData) throw new Error('Request not found.');
 
-        console.log("Initial request data fetched:", requestData);
+        console.log("Fresh request data fetched:", requestData);
+        // Update state and cache
         setRequest(requestData);
+        setCachedData(cacheKeyRequest, requestData);
+        setError(''); // Clear previous errors on successful fetch
 
+        // Process parsed data if successful
         if (requestData.parsing_status === 'success' && requestData.parsed_data) {
           try {
             const receivedData = typeof requestData.parsed_data === 'string'
@@ -72,21 +144,31 @@ function RequestPage() {
               throw new Error("Fetched data is missing expected structure.");
             }
             setParsedData(receivedData);
+            setCachedData(cacheKeyParsed, receivedData); // Cache parsed data
           } catch (parseErr) {
-            console.error("Error parsing initial data:", parseErr);
+            console.error("Error parsing fetched data:", parseErr);
             setError(`Failed to process results: ${parseErr.message}`);
+            setParsedData(null); // Clear potentially stale parsed data
+            sessionStorage.removeItem(cacheKeyParsed); // Remove invalid item from cache
           }
         } else if (requestData.parsing_status === 'error') {
           setError(`Parsing failed: ${requestData.error_message || 'Unknown error'}`);
+          setParsedData(null); // Clear potentially stale parsed data
+          sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data if status is error
+        } else {
+          // If status is pending/processing, ensure parsedData state is null
+          setParsedData(null);
+          sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data if not success/error
         }
 
+        // Fetch Preview URL (always fetch, don't cache)
         if (requestData.storage_path) {
           console.log("Fetching PDF preview URL for path:", requestData.storage_path);
           try {
             const { data: urlData, error: urlError } = await supabase
               .storage
               .from('statement-uploads')
-              .createSignedUrl(requestData.storage_path, 60 * 60);
+              .createSignedUrl(requestData.storage_path, 60 * 60); // 1 hour validity
 
             if (!isMounted) return;
 
@@ -95,27 +177,42 @@ function RequestPage() {
             console.log("Signed URL fetched:", urlData.signedUrl);
             setPreviewUrl(urlData.signedUrl);
           } catch (previewErr) {
+             // Don't overwrite main error state if preview fails, just log it
             console.error("Error fetching PDF preview URL:", previewErr);
+            // Optionally set a specific preview error state if needed
           }
         }
 
-      } catch (err) {
+      } catch (err) { // Catch errors from fetching request or parsing URL
         if (!isMounted) return;
-        console.error('Error fetching request details:', err);
+        console.error('Error during request data fetch/processing:', err);
         setError(`Failed to load request: ${err.message}`);
+        // Clear potentially stale cache if the main request fetch fails
+        // setRequest(null); 
+        // setParsedData(null);
+        // sessionStorage.removeItem(cacheKeyRequest);
+        // sessionStorage.removeItem(cacheKeyParsed);
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) setIsLoading(false); // Stop loading indicator
       }
     }
 
-    fetchRequestData();
+    // Only fetch data if we're not loading auth
+    if (!isAuthLoading) {
+      fetchRequestData();
+    }
 
+    // Cleanup function
     return () => {
       isMounted = false;
       console.log("RequestPage unmounting or requestId changed - cleaning up");
-      if (previewUrl) {
-        setPreviewUrl(null);
-      }
+      // No need to clear sessionStorage here
+      // Revoke object URL if it exists
+       if (previewUrl) {
+         URL.revokeObjectURL(previewUrl);
+         // No need to setPreviewUrl(null) on unmount, new load will handle it
+       }
+      // Clear timers and channels
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
@@ -126,23 +223,34 @@ function RequestPage() {
         channelRef.current = null;
       }
     };
-  }, [requestId]);
+  // ---> Modified: Add cache keys to dependency array
+  }, [requestId, cacheKeyRequest, cacheKeyParsed, isAuthLoading]);
+  // <--- End Modified
 
   useEffect(() => {
-    if (!request || ['success', 'error', 'failed', 'expired', 'canceled', 'refunded'].includes(request.payment_status) && ['success', 'error'].includes(request.parsing_status)) {
+    // ---> Modified: Logic for managing Realtime subscription
+    // Condition to determine if subscription is needed
+    const needsSubscription = request && 
+                             !['success', 'error'].includes(request.parsing_status) && 
+                             !['failed', 'expired', 'canceled', 'refunded', 'succeeded', 'na'].includes(request.payment_status); 
+                             // Include payment status check just in case, though credit model reduces its importance here
+
+    if (!needsSubscription) {
       if (channelRef.current) {
         console.log("Removing Realtime channel (request status is final or no request data).");
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
-      return;
+      return; // Exit if no subscription needed
     }
 
+    // If subscription is needed but already exists, do nothing
     if (channelRef.current) {
-      console.log("Realtime channel already exists.");
+      console.log("Realtime channel already exists and is needed.");
       return;
     }
 
+    // Create subscription if needed and doesn't exist
     console.log(`Subscribing to Realtime updates for request ID: ${requestId}`);
     const channel = supabase
       .channel(`request-status:${requestId}`)
@@ -153,7 +261,10 @@ function RequestPage() {
           console.log('Realtime UPDATE received:', payload);
           const updatedRequest = payload.new;
           if (updatedRequest) {
+            // Update state and cache
             setRequest(updatedRequest);
+            setCachedData(cacheKeyRequest, updatedRequest);
+            setError(''); // Clear error on successful update
 
             if (updatedRequest.parsing_status === 'success' && updatedRequest.parsed_data) {
               try {
@@ -164,19 +275,22 @@ function RequestPage() {
                   throw new Error("Updated data is missing expected structure.");
                 }
                 setParsedData(receivedData);
-                setError('');
+                setCachedData(cacheKeyParsed, receivedData); // Update parsed data cache
                 console.log("Realtime: Parsed data updated from subscription.");
               } catch (parseErr) {
                 console.error("Realtime: Error parsing updated data:", parseErr);
                 setError(`Failed to process update: ${parseErr.message}`);
                 setParsedData(null);
+                sessionStorage.removeItem(cacheKeyParsed); // Remove invalid item from cache
               }
             } else if (updatedRequest.parsing_status === 'error') {
               setError(`Parsing failed: ${updatedRequest.error_message || 'Unknown error'}`);
               setParsedData(null);
-            } else if (updatedRequest.parsing_status === 'processing' || updatedRequest.parsing_status === 'initiated'){
-              setError('');
+              sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data cache on error
+            } else {
+              // If status is pending/processing ensure parsedData is null
               setParsedData(null);
+               sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data cache if not success/error
             }
           }
         }
@@ -188,7 +302,9 @@ function RequestPage() {
       });
 
     channelRef.current = channel;
-  }, [request, requestId]);
+  // ---> Modified: Add cache keys to dependency array
+  }, [request, requestId, cacheKeyRequest, cacheKeyParsed]);
+  // <--- End Modified
 
   useEffect(() => {
     if (request && request.parsing_status === 'processing') {
@@ -255,7 +371,20 @@ function RequestPage() {
   }, [parsedData, request, requestId]);
 
   let statusIndicator = null;
-  if (isLoading) {
+  if (isAuthLoading) {
+    statusIndicator = (
+      <div className="loading-message-container">
+        <div className="spinner"></div> <p>Loading authentication...</p>
+      </div>
+    );
+  } else if (!user) {
+    statusIndicator = (
+      <div className="error-message-container">
+        <p className="error-message">Please sign in to view request details</p>
+        <button onClick={() => navigate('/')} className="cta-button">Go to Home Page</button>
+      </div>
+    );
+  } else if (isLoading) {
     statusIndicator = (
       <div className="loading-message-container">
         <div className="spinner"></div> <p>Loading request details...</p>
@@ -264,9 +393,7 @@ function RequestPage() {
   } else if (error) {
     statusIndicator = <p className="error-message">Error: {error}</p>;
   } else if (request) {
-      if (request.payment_status !== 'succeeded' && request.payment_status !== 'na') {
-          statusIndicator = <p className="warning-message">Payment Status: {request.payment_status}. Waiting for payment confirmation.</p>;
-      } else if (request.parsing_status === 'pending') {
+      if (request.parsing_status === 'pending') {
           statusIndicator = <p className="info-message">Parsing pending. Waiting to start processing...</p>;
       } else if (request.parsing_status === 'initiated') {
           statusIndicator = <p className="info-message">Parsing initiated. Preparing to process...</p>;
@@ -314,62 +441,55 @@ function RequestPage() {
 
   return (
     <div className="container request-details-container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '10px', borderBottom: '1px solid #eee' }}>
-        <h2>Request Details</h2>
-        <div>
-            <button onClick={() => navigate('/new-request')} className="cta-button secondary" style={{ marginRight: '10px' }}>Create New</button>
-            <button onClick={() => navigate('/')} className="cta-button secondary">View History</button>
-        </div>
-      </header>
 
       <div className="status-indicator-area" style={{ marginBottom: '20px' }}>
           {statusIndicator}
       </div>
 
-      <div className="results-section">
-        <div className="results-header">
-          <h2>{request?.file_name || (isLoading ? 'Loading...' : 'Statement')}</h2>
-          <div className="results-actions">
-            {request?.parsing_status === 'success' && parsedData && (
-              <button onClick={handleDownloadJson} className="cta-button download-button">
-                Download JSON
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="summary-section">
-             {parsedData?.meta_data?.['Ending Balance Offset'] === 0 && request?.parsing_status === 'success' && (
-               <div className="success-message-container accuracy-success">
-                  <p className="success-message"> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
-               </div>
-             )}
-             <StatementSummary metaData={parsedData?.meta_data} />
-         </div>
-
-        <div className="results-content">
-          <div className="pdf-column">
-            {previewUrl ? (
-              <iframe src={previewUrl} width="100%" height="800px" title="PDF Preview" />
-            ) : (
-              <div className="empty-preview">
-                 {isLoading && <p>Loading preview...</p>}
-                 {!isLoading && request?.storage_path && <p>Could not load preview.</p>}
-                 {!isLoading && !request?.storage_path && <p>No statement file found for this request.</p>}
-                 {error && !isLoading && <p>Preview unavailable due to error.</p>}
-               </div>
-            )}
-          </div>
-          <div className="right-column">
-            <div className="transactions-column">
-              <TransactionsTable transactions={parsedData?.transactions_data || []} isLoading={isLoading || (request?.parsing_status === 'processing')} />
+      {!isAuthLoading && user && (
+        <div className="results-section">
+          <div className="results-header">
+            <h2>{request?.file_name || (isLoading ? 'Loading...' : 'Statement')}</h2>
+            <div className="results-actions">
+              {request?.parsing_status === 'success' && parsedData && (
+                <button onClick={handleDownloadJson} className="cta-button download-button">
+                  Download JSON
+                </button>
+              )}
             </div>
-            <div className="balances-section">
+          </div>
+
+          <div className="summary-section">
+              {parsedData?.meta_data?.['Ending Balance Offset'] === 0 && request?.parsing_status === 'success' && (
+                <div className="success-message-container accuracy-success">
+                    <p className="success-message"> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
+                </div>
+              )}
+              <StatementSummary metaData={parsedData?.meta_data} />
+          </div>
+
+          <div className="results-content">
+            <div className="pdf-column">
+              {previewUrl ? (
+                <iframe src={previewUrl} width="100%" height="800px" title="PDF Preview" />
+              ) : (
+                <div className="empty-preview">
+                  {isLoading && <p>Loading preview...</p>}
+                  {!isLoading && request?.storage_path && <p>Could not load preview.</p>}
+                  {!isLoading && !request?.storage_path && <p>No statement file found for this request.</p>}
+                  {error && !isLoading && <p>Preview unavailable due to error.</p>}
+                </div>
+              )}
+            </div>
+            <div className="right-column">
+              <div className="transactions-column">
+                <TransactionsTable transactions={parsedData?.transactions_data || []} isLoading={isLoading || (request?.parsing_status === 'processing')} />
+              </div>
               <BalancesTable balances={parsedData?.balances || []} isLoading={isLoading || (request?.parsing_status === 'processing')} />
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

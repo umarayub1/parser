@@ -31,12 +31,13 @@ function RequestsHistoryTable({ requests, isLoading }) {
   }
 
   const handleRowClick = (requestId) => {
+    console.log("Navigating to request details:", requestId);
     navigate(`/requests/${requestId}`);
   };
 
   return (
     <div className="history-table-container">
-      <h2>Your Request History</h2>
+      <h2>History</h2>
       {/* Add styling for the table */}
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
@@ -45,7 +46,6 @@ function RequestsHistoryTable({ requests, isLoading }) {
             <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>File Name</th>
             <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Created At</th>
             <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Pages</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Payment Status</th>
             <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Parsing Status</th>
             {/* <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Offset</th> Potentially add offset later */}
           </tr>
@@ -63,7 +63,6 @@ function RequestsHistoryTable({ requests, isLoading }) {
               <td style={{ border: '1px solid #ddd', padding: '8px' }}>{req.file_name || 'N/A'}</td>
               <td style={{ border: '1px solid #ddd', padding: '8px' }}>{formatDate(req.created_at)}</td>
               <td style={{ border: '1px solid #ddd', padding: '8px' }}>{req.page_count ?? 'N/A'}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{formatStatus(req.payment_status)}</td>
               <td style={{ border: '1px solid #ddd', padding: '8px' }}>{formatStatus(req.parsing_status)}</td>
               {/* <td style={{ border: '1px solid #ddd', padding: '8px' }}>{req.parsed_data?.meta_data?.['Ending Balance Offset'] ?? 'N/A'}</td> */}
             </tr>

@@ -29,30 +29,87 @@ serve(async (req: Request) => {
   // Option 2: Rely on frontend not calling it (less secure if function is exposed)
 
   try {
-    const { requestId } = await req.json();
+    const { requestId, type = 'parse' } = await req.json();
     if (!requestId) throw new Error("Request ID is required for simulation.");
 
-    console.log(`Simulating payment success for request ID: ${requestId}`);
+    console.log(`Simulating payment success for request ID: ${requestId}, type: ${type}`);
 
-    // Mimic the DB update from a successful IPN ('finished' status)
-    const dbUpdateData = {
-      payment_status: 'succeeded',
-      parsing_status: 'pending', // Mark as ready for parsing
-      nowpayments_payment_status: 'simulated_success', // Indicate simulation
-      error_message: null, // Clear any previous errors
-    };
+    if (type === 'top_up') {
+      // For top-up transactions
+      // 1. Get the amount from the transaction
+      const { data: transactionData, error: fetchError } = await supabaseAdmin
+        .from('credit_transactions')
+        .select('amount_usd, user_id')
+        .eq('id', requestId)
+        .single();
 
-    const { error: dbError } = await supabaseAdmin
-      .from('requests')
-      .update(dbUpdateData)
-      .eq('id', requestId);
+      if (fetchError || !transactionData) {
+        throw new Error(`Could not find transaction: ${fetchError?.message || 'Transaction not found'}`);
+      }
 
-    if (dbError) {
-      console.error(`Simulation DB update failed for request ${requestId}:`, dbError);
-      throw new Error(`Database update failed during simulation: ${dbError.message}`);
+      // 2. Update the transaction status
+      const { error: updateError } = await supabaseAdmin
+        .from('credit_transactions')
+        .update({
+          payment_status: 'succeeded',
+          nowpayments_payment_status: 'simulated_success',
+          error_message: null,
+        })
+        .eq('id', requestId);
+
+      if (updateError) {
+        throw new Error(`Failed to update transaction: ${updateError.message}`);
+      }
+
+      // 3. Add credits to the user's account
+      const { amount_usd, user_id } = transactionData;
+      const creditAmount = Math.floor(amount_usd); // Convert to whole credits (1 USD = 1 credit)
+
+      // Check if user has a profile record
+      const { data: userProfile, error: profileFetchError } = await supabaseAdmin
+        .from('profiles')
+        .select('credits_remaining')
+        .eq('id', user_id)
+        .single();
+
+      if (profileFetchError) {
+        throw new Error(`Error checking user profile: ${profileFetchError.message}`);
+      }
+
+      // Update the profile with added credits
+      const { error: profileUpdateError } = await supabaseAdmin
+        .from('profiles')
+        .update({
+          credits_remaining: (userProfile.credits_remaining || 0) + creditAmount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user_id);
+
+      if (profileUpdateError) {
+        throw new Error(`Failed to update user credits: ${profileUpdateError.message}`);
+      }
+
+      console.log(`Added ${creditAmount} credits to user ${user_id}`);
+    } else {
+      // Original parsing request logic
+      const dbUpdateData = {
+        payment_status: 'succeeded',
+        parsing_status: 'pending',
+        nowpayments_payment_status: 'simulated_success',
+        error_message: null,
+      };
+
+      const { error: dbError } = await supabaseAdmin
+        .from('requests')
+        .update(dbUpdateData)
+        .eq('id', requestId);
+
+      if (dbError) {
+        throw new Error(`Database update failed during simulation: ${dbError.message}`);
+      }
     }
 
-    console.log(`Successfully simulated payment success for request ${requestId}.`);
+    console.log(`Successfully simulated payment success for ${type} request ${requestId}.`);
 
     return new Response(
       JSON.stringify({ success: true, message: 'Payment simulated successfully' }),
@@ -68,7 +125,7 @@ serve(async (req: Request) => {
       JSON.stringify({ error: error.message }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500, // Use 500 for server errors during simulation
+        status: 500,
       }
     );
   }

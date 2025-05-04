@@ -15,27 +15,48 @@ const formatDate = (dateString) => {
 
 const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return 'N/A';
-  return amount.toLocaleString(undefined, { style: 'currency', currency: 'USD' }); // Assuming USD, adjust if needed
+  return new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD',
+    minimumFractionDigits: 2
+  }).format(amount);
 };
 
 function StatementSummary({ metaData }) {
-  // If no metaData, render the placeholder structure
+  // If no metaData, render the placeholder structure with skeleton loading
   if (!metaData) {
     return (
-      <div className="summary-container">
-        <h3>Account Summary</h3>
-        <div className="summary-grid">
-          <div><strong>Bank:</strong></div>
-          <div><strong>Customer:</strong></div>
-          <div><strong>Account Number:</strong></div>
-          <div><strong>Ending Balance Offset:</strong></div>
-          <div><strong>Starting Statement Date:</strong></div>
-          <div><strong>Ending Statement Date:</strong></div>
-          <div><strong>Starting Balance:</strong></div>
-          <div><strong>Ending Balance:</strong></div>
-          <div><strong>Total Transactions:</strong></div>
-          <div><strong>Credits:</strong></div>
-          <div><strong>Debits:</strong></div>
+      <div className="summary-card">
+        <div className="summary-header">
+          <h3>Account Summary</h3>
+          <div className="skeleton-badge"></div>
+        </div>
+        <div className="summary-body">
+          <div className="summary-row skeleton">
+            <div className="summary-label"></div>
+            <div className="summary-value"></div>
+          </div>
+          <div className="summary-row skeleton">
+            <div className="summary-label"></div>
+            <div className="summary-value"></div>
+          </div>
+          <div className="summary-row skeleton">
+            <div className="summary-label"></div>
+            <div className="summary-value"></div>
+          </div>
+          <div className="summary-row skeleton">
+            <div className="summary-label"></div>
+            <div className="summary-value"></div>
+          </div>
+          <div className="summary-divider"></div>
+          <div className="summary-row skeleton">
+            <div className="summary-label"></div>
+            <div className="summary-value"></div>
+          </div>
+          <div className="summary-row skeleton">
+            <div className="summary-label"></div>
+            <div className="summary-value"></div>
+          </div>
         </div>
       </div>
     );
@@ -49,31 +70,100 @@ function StatementSummary({ metaData }) {
     'Transaction Credit Count': creditCount = 0,
     'Transaction Credits': creditAmount = 0,
     'Transaction Debit Count': debitCount = 0,
-    'Transaction Debits': debitAmount = 0, // Assuming negative for debits in JSON amount field, using absolute value here
+    'Transaction Debits': debitAmount = 0,
     'Bank name': bankName,
     'Account number': accountNumber,
     'Customer name': customerName,
     'Ending Balance Offset': balanceOffset,
   } = metaData;
 
+  // Calculate statement period in days
+  const daysBetween = () => {
+    if (!startDate || !endDate) return 'N/A';
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return `${diffDays} days`;
+    } catch (e) {
+      return 'N/A';
+    }
+  };
+
   return (
-    <div className="summary-container">
-      <h3>Account Summary</h3>
-      <div className="summary-grid">
-        <div><strong>Bank:</strong> {bankName || 'N/A'}</div>
-        <div><strong>Customer:</strong> {customerName || 'N/A'}</div>
-        <div><strong>Account Number:</strong> {accountNumber || 'N/A'}</div>
-        <div><strong>Ending Balalnce Offset:</strong> {balanceOffset}</div>
-        <div><strong>Starting Statement Date:</strong> {formatDate(startDate)}</div>
-        <div><strong>Ending Statement Date:</strong> {formatDate(endDate)}</div>
-        <div><strong>Starting Balance:</strong> {formatCurrency(startBalance)}</div>
-        <div><strong>Ending Balance:</strong> {formatCurrency(endBalance)}</div>
-        <div><strong>Total Transactions:</strong> {creditCount + debitCount}</div>
-        <div>
-             <strong>Credits:</strong> <span className="credit-amount">{creditCount} credits(s) +{creditAmount.toFixed(2)}</span>
+    <div className="summary-card">
+      <div className="summary-header">
+        <h3>Account Summary</h3>
+        <div className="bank-badge">{bankName || 'Unknown Bank'}</div>
+      </div>
+      
+      <div className="summary-body">
+        <div className="summary-columns">
+          <div className="summary-column">
+            <div className="summary-row">
+              <div className="summary-label">Customer</div>
+              <div className="summary-value">{customerName || 'N/A'}</div>
+            </div>
+            <div className="summary-row">
+              <div className="summary-label">Account Number</div>
+              <div className="summary-value account-number">{accountNumber || 'N/A'}</div>
+            </div>
+            <div className="summary-row">
+              <div className="summary-label">Statement Period</div>
+              <div className="summary-value">
+                {formatDate(startDate)} to {formatDate(endDate)} ({daysBetween()})
+              </div>
+            </div>
+          </div>
+          
+          <div className="summary-column">
+            <div className="summary-row">
+              <div className="summary-label">Starting Balance</div>
+              <div className="summary-value">{formatCurrency(startBalance)}</div>
+            </div>
+            <div className="summary-row">
+              <div className="summary-label">Ending Balance</div>
+              <div className="summary-value fw-bold">{formatCurrency(endBalance)}</div>
+            </div>
+            <div className="summary-row balance-offset">
+              <div className="summary-label">Balance Offset</div>
+              <div className="summary-value text-muted">{balanceOffset || 'None'}</div>
+            </div>
+          </div>
         </div>
-        <div>
-             <strong>Debits:</strong> <span className="debit-amount">{debitCount} debits(s) -{Math.abs(debitAmount.toFixed(2))}</span>
+        
+        <div className="summary-divider"></div>
+        
+        <div className="transaction-overview">
+          <div className="overview-header">
+            <div className="total-transactions">
+              <span className="transaction-count">{creditCount + debitCount}</span>
+              <span className="transaction-label">Transactions</span>
+            </div>
+          </div>
+          
+          <div className="transaction-summary">
+            <div className="transaction-type credits">
+              <div className="transaction-amount">
+                {formatCurrency(creditAmount)}
+              </div>
+              <div className="transaction-details">
+                <div className="transaction-label">Credits</div>
+                <div className="transaction-count">{creditCount} transaction{creditCount !== 1 ? 's' : ''}</div>
+              </div>
+            </div>
+            
+            <div className="transaction-type debits">
+              <div className="transaction-amount">
+                {formatCurrency(Math.abs(debitAmount))}
+              </div>
+              <div className="transaction-details">
+                <div className="transaction-label">Debits</div>
+                <div className="transaction-count">{debitCount} transaction{debitCount !== 1 ? 's' : ''}</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

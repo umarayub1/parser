@@ -1,48 +1,78 @@
-.balances-container {
-  padding: 15px;
-  background-color: #f9f9f9;
-  border: 1px solid #eee;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  height: 400px; /* Fixed height to enable scrolling */
+.balances-section {
   display: flex;
   flex-direction: column;
+  background-color: var(--white);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-sm);
+  height: 100%;
 }
 
-.balances-container h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  color: #333;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 10px;
+.balances-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--medium-gray);
+  background-color: #f8f9fa;
+}
+
+.balances-header h3 {
+  margin: 0;
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.balances-count {
+  background-color: var(--light-gray);
+  padding: 0.25rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.875rem;
+  color: var(--dark-gray);
+  font-weight: 500;
+}
+
+.balances-summary {
+  display: flex;
+  background-color: var(--light-gray);
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--medium-gray);
+}
+
+.summary-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.summary-label {
+  font-size: 0.8rem;
+  color: var(--dark-gray);
+  margin-bottom: 0.25rem;
+}
+
+.summary-value {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.min-amount {
+  color: var(--danger-color);
+}
+
+.max-amount {
+  color: var(--success-color);
+}
+
+.avg-amount {
+  color: var(--primary-color);
 }
 
 .table-container {
   flex: 1;
-  overflow-y: auto; /* Auto overflow for better behavior */
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  scrollbar-width: thin; /* For Firefox */
-  scrollbar-color: #888 #f1f1f1; /* For Firefox */
-}
-
-/* Scrollbar styles */
-.table-container::-webkit-scrollbar {
-  width: 8px;
-}
-
-.table-container::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-.table-container::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-.table-container::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  overflow: auto;
+  border-bottom-left-radius: var(--border-radius);
+  border-bottom-right-radius: var(--border-radius);
 }
 
 table {
@@ -50,49 +80,83 @@ table {
   border-collapse: collapse;
 }
 
-thead {
-  background-color: #f2f2f2;
+th {
+  background-color: #eef2ff;
+  padding: 0.875rem 1.25rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--primary-color);
+  cursor: pointer;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 10;
+  user-select: none;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+  border-bottom: 1px solid var(--medium-gray);
 }
 
-th, td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #ddd;
-  text-align: left;
+th::after {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  opacity: 0.3;
+  background-size: contain;
 }
 
-tr:nth-child(even) {
-  background-color: #f9f9f9;
+th.sort-asc::after {
+  content: "↑";
+  opacity: 1;
 }
 
-tr:hover {
-  background-color: #f1f1f1;
+th.sort-desc::after {
+  content: "↓";
+  opacity: 1;
 }
 
-th {
-  font-weight: bold;
-  color: #555;
+th:hover {
+  background-color: rgba(67, 97, 238, 0.1);
+}
+
+td {
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--medium-gray);
+  vertical-align: middle;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background-color: rgba(67, 97, 238, 0.05);
 }
 
 .amount-column {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.credit-amount {
-  color: #28a745;
+.empty-table {
+  text-align: center;
+  padding: 2rem;
+  color: var(--dark-gray);
+  font-style: italic;
 }
 
-.debit-amount {
-  color: #dc3545;
-}
-
-.final-balance {
-  font-weight: bold;
-  background-color: #e9ecef;
-}
-
-.final-balance td {
-  border-top: 2px solid #dee2e6;
+@media (max-width: 768px) {
+  .balances-header, .balances-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .summary-item {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
 } 
