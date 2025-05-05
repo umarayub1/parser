@@ -1,25 +1,12 @@
 # Build stage
-FROM node:20-alpine as build
+FROM node:20-alpine AS build
 
-# Define build arguments for Vite environment variables
-ARG VITE_PARSING_API_URL
-ARG VITE_APP_MODE=production # Default to production
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_SUPABASE_URL
-ARG VITE_PARSING_API_KEY
-ARG VITE_APP_BASE_URL
+ENV NODE_ENV=development
+ENV VITE_SUPABASE_URL=https://zxetedcvnlqapnpqnrid.supabase.co
+ENV VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4ZXRlZGN2bmxxYXBucHFucmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwNjkyNjcsImV4cCI6MjA1OTY0NTI2N30.E4BtILMqZYvOOl3X0qOEXIGbq_9JaJfJAAgssEsxu0o
+ENV VITE_APP_BASE_URL=http://localhost:8080
 
 WORKDIR /app
-
-# Set environment variables from build arguments for the build process
-ENV VITE_PARSING_API_URL=$VITE_PARSING_API_URL
-ENV VITE_APP_MODE=$VITE_APP_MODE
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-# SECURITY WARNING: Avoid embedding sensitive keys directly if possible.
-ENV VITE_PARSING_API_KEY=$VITE_PARSING_API_KEY
-ENV VITE_APP_BASE_URL=$VITE_APP_BASE_URL
-
 # Copy package files and install dependencies
 COPY package*.json ./
 RUN npm ci
@@ -43,10 +30,9 @@ COPY --from=build /app/dist /app/dist
 
 # Set the environment variables
 ENV PORT=8080
-ENV NODE_ENV=production
 
 # Expose the port
 EXPOSE 8080
 
 # Start the server
-CMD ["serve", "-s", "dist", "-l", "8080"] 
+CMD ["serve", "-s", "dist", "-l", "8080"]
