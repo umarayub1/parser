@@ -26,7 +26,7 @@ const formatCurrency = (amount) => {
 };
 
 function BalancesTable({ balances = [] }) {
-  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'original' });
   // Store original balances for reference
   const originalBalances = useMemo(() => balances, [balances]);
   

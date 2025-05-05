@@ -1,0 +1,80 @@
+/* RequestsHistoryTable Styles */
+
+.history-table-container {
+  margin-bottom: 2rem;
+}
+
+.history-table-container h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-color, #333);
+}
+
+/* Status Badge Styles */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  gap: 6px;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.status-icon {
+  display: flex;
+  align-items: center;
+}
+
+.status-badge-pending {
+  background-color: rgba(255, 209, 102, 0.15);
+  color: #805b10;
+  border: 1px solid rgba(255, 209, 102, 0.3);
+}
+
+.status-badge-processing {
+  background-color: rgba(67, 97, 238, 0.15);
+  color: var(--primary-color, #4361ee);
+  border: 1px solid rgba(67, 97, 238, 0.3);
+}
+
+.status-badge-success {
+  background-color: rgba(6, 214, 160, 0.15);
+  color: #0a6e51;
+  border: 1px solid rgba(6, 214, 160, 0.3);
+}
+
+.status-badge-error {
+  background-color: rgba(239, 71, 111, 0.15);
+  color: var(--danger-color, #ef476f);
+  border: 1px solid rgba(239, 71, 111, 0.3);
+}
+
+.status-badge-unknown {
+  background-color: rgba(148, 148, 148, 0.15);
+  color: #666;
+  border: 1px solid rgba(148, 148, 148, 0.3);
+}
+
+/* Hover effect for table rows */
+.history-table-container table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+/* Animation for the processing status */
+@keyframes rotation {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(359deg);
+  }
+}
+
+.status-badge-processing .status-icon svg {
+  animation: rotation 2s infinite linear;
+} 

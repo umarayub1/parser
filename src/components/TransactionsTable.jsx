@@ -35,7 +35,7 @@ const formatCurrency = (amount, isDeposit) => {
 
 function TransactionsTable({ transactions = [] }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'original' });
   // Store original transactions for reference
   const originalTransactions = useMemo(() => transactions, [transactions]);
   

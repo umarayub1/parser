@@ -17,6 +17,39 @@ import { selectUser, getSessionThunk, setSession } from '../store/authSlice';
 // Import styles (using App.css for now, consider dedicated CSS)
 import '../App.css';
 
+// Add consistent typography styles
+const typographyStyles = {
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif',
+  heading: {
+    fontSize: '1.8rem',
+    fontWeight: '600',
+    marginBottom: '1rem',
+    color: '#333',
+  },
+  subheading: {
+    fontSize: '1.4rem',
+    fontWeight: '500',
+    marginBottom: '0.75rem',
+    color: '#333',
+  },
+  text: {
+    fontSize: '1.05rem',
+    lineHeight: '1.5',
+    color: '#444',
+    margin: '0 0 0.5rem 0',
+  },
+  smallText: {
+    fontSize: '0.95rem',
+    lineHeight: '1.4',
+    color: '#666',
+  },
+  label: {
+    fontSize: '1.05rem',
+    fontWeight: '500',
+    color: '#555',
+  }
+};
+
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
 
 // Helper function to format time
@@ -537,13 +570,13 @@ function NewRequestPage() {
   // --- Render Logic ---
   return (
     // Using App.css classes for consistency for now
-    <div className="container new-request-container">
+    <div className="container new-request-container" style={{ fontFamily: typographyStyles.fontFamily }}>
       {/* Simple Header */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '10px', borderBottom: '1px solid #eee' }}>
       </header>
 
       {!user && (
-         <p className="warning-message">Please <a href="/">Sign In</a> to create a request.</p>
+         <p className="warning-message" style={{ ...typographyStyles.text, color: '#f57c00' }}>Please <a href="/">Sign In</a> to create a request.</p>
       )}
 
       {user && (
@@ -563,6 +596,7 @@ function NewRequestPage() {
                <label
                  htmlFor="file-upload"
                  className={`cta-button ${isLoading ? 'disabled' : ''}`}
+                 style={{ fontSize: '1rem' }}
                >
                  Choose PDF File
                </label>
@@ -574,7 +608,7 @@ function NewRequestPage() {
                      onClick={triggerParsing} 
                      disabled={pageCount === 0 || userCredits < (pageCount * 0.1)} 
                      className="cta-button"
-                     style={{width: '150px'}} // Fixed width for consistency
+                     style={{width: '150px', fontSize: '1rem'}} // Fixed width for consistency
                    >
                      {parsingStatus === 'error' ? 'Retry Parsing' : 'Start Parsing'}
                    </button>
@@ -582,7 +616,7 @@ function NewRequestPage() {
                    <button 
                      className="cta-button" 
                      disabled={true}
-                     style={{width: '150px'}} // Fixed width for consistency
+                     style={{width: '150px', fontSize: '1rem'}} // Fixed width for consistency
                    >
                      Processing...
                    </button>
@@ -591,10 +625,10 @@ function NewRequestPage() {
                  {/* Show file information separately */}
                  <div className="file-info" style={{marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '5px', display: 'flex', alignItems: 'center'}}>
                    <div style={{flex: 1}}>
-                     <p style={{margin: '0'}}><strong>File:</strong> {file.name}</p>
-                     <p style={{margin: '5px 0 0'}}><strong>Pages:</strong> {pageCount} ({(pageCount * 0.1).toFixed(1)} credits)</p>
+                     <p style={{...typographyStyles.text, margin: '0'}}><strong>File:</strong> {file.name}</p>
+                     <p style={{...typographyStyles.text, margin: '5px 0 0'}}><strong>Pages:</strong> {pageCount} ({(pageCount * 0.1).toFixed(1)} credits)</p>
                      {pageCount > 0 && userCredits < (pageCount * 0.1) && (
-                       <p style={{margin: '5px 0 0', color: 'red'}}><strong>Not enough credits!</strong> You need {(pageCount * 0.1).toFixed(1)} credits but have {userCredits.toFixed(1)}. <a href="/top-up">Top up</a></p>
+                       <p style={{...typographyStyles.text, margin: '5px 0 0', color: 'red'}}><strong>Not enough credits!</strong> You need {(pageCount * 0.1).toFixed(1)} credits but have {userCredits.toFixed(1)}. <a href="/top-up">Top up</a></p>
                      )}
                    </div>
                  </div>
@@ -603,12 +637,12 @@ function NewRequestPage() {
            </div>
 
            {/* User Messages & Loading Indicators */}
-           {error && <p className="error-message">Error: {error}</p>}
+           {error && <p className="error-message" style={typographyStyles.text}>Error: {error}</p>}
 
            {/* General Spinner (if loading but NOT parsing) */}
            {isLoading && parsingStatus !== 'processing' && (
              <div className="loading-message-container">
-               <div className="spinner"></div> <p>{loadingMessage || 'Processing...'}</p>
+               <div className="spinner"></div> <p style={typographyStyles.text}>{loadingMessage || 'Processing...'}</p>
              </div>
            )}
 
@@ -627,25 +661,25 @@ function NewRequestPage() {
                      <div className="pending-parsing-container loading-message-container">
                        <div className="spinner"></div>
                        <div className="pending-message">
-                         <h3>Parsing in Progress...</h3>
-                         <p>Your bank statement is currently being processed. This may take several minutes depending on the size of the document.</p>
+                         <h3 style={typographyStyles.subheading}>Parsing in Progress...</h3>
+                         <p style={typographyStyles.text}>Your bank statement is currently being processed. This may take several minutes depending on the size of the document.</p>
 
                          {/* Estimates & Dynamic Remaining Time */}
                          {pageCount > 0 && currentCreatedAtTime && completionTime ? (
                            <div className="progress-timer"> {/* Reusing class for styling */}
-                             <p>Estimated total duration: ~{Math.ceil(estimatedDurationMs / 60000)} minutes ({pageCount} pages)</p>
+                             <p style={typographyStyles.text}>Estimated total duration: ~{Math.ceil(estimatedDurationMs / 60000)} minutes ({pageCount} pages)</p>
                              <br />
-                             <p>Calculated time remaining: {formatTime(remainingMs)}</p>
+                             <p style={typographyStyles.text}>Calculated time remaining: {formatTime(remainingMs)}</p>
                              <br />
-                             <p>Expected completion around: {completionTime.toLocaleTimeString()}</p>
+                             <p style={typographyStyles.text}>Expected completion around: {completionTime.toLocaleTimeString()}</p>
                              {/* Optional: Add a simple progress bar based on elapsed time */}
                              {/* <progress max={estimatedDurationMs} value={elapsedTime}></progress> */}
                            </div>
                          ) : (
-                           <p>Estimating time...</p>
+                           <p style={typographyStyles.text}>Estimating time...</p>
                          )}
 
-                         <p>You can leave this page and come back later - the status will update automatically.</p>
+                         <p style={typographyStyles.text}>You can leave this page and come back later - the status will update automatically.</p>
                        </div>
                      </div>
                    );
@@ -654,20 +688,26 @@ function NewRequestPage() {
            )}
 
            {/* Message if parsing is complete or already in progress */}
-           {user && currentRequestId && (parsingStatus === 'processing' || parsingStatus === 'initiated') && <p>Parsing is currently in progress...</p>}
-           {user && currentRequestId && parsingStatus === 'success' && <p>Parsing complete. See results below.</p>}
+           {user && currentRequestId && (parsingStatus === 'processing' || parsingStatus === 'initiated') && 
+             <p style={typographyStyles.text}>Parsing is currently in progress...</p>}
+           {user && currentRequestId && parsingStatus === 'success' && 
+             <p style={typographyStyles.text}>Parsing complete. See results below.</p>}
 
            {/* --- RESULTS SECTION --- */}
            {/* Show placeholder sections even before PDF upload */}
            <div className="results-section" style={{marginTop: '30px'}}>
              {parsedData && !isLoading && !error && (
-                <div className="success-message-container"> <p className="success-message">✅ Parsing completed successfully!</p> </div>
+                <div className="success-message-container"> 
+                  <p className="success-message" style={typographyStyles.text}>✅ Parsing completed successfully!</p> 
+                </div>
              )}
              <div className="results-header">
-               <h2>Results {showTestDataResults ? '(Test Preview)' : (!previewUrlToShow && !dataToShow ? '(Preview)' : '')}</h2>
+               <h2 style={typographyStyles.heading}>Results {showTestDataResults ? '(Test Preview)' : (!previewUrlToShow && !dataToShow ? '(Preview)' : '')}</h2>
                <div className="results-actions">
                   {(showNormalResults || showTestDataResults) && (
-                    <button onClick={handleDownloadJson} className="cta-button download-button"> Download JSON </button>
+                    <button onClick={handleDownloadJson} className="cta-button download-button" style={{ fontSize: '1rem' }}> 
+                      Download JSON 
+                    </button>
                   )}
                </div>
              </div>
@@ -677,47 +717,47 @@ function NewRequestPage() {
                  <>
                    {dataToShow?.meta_data?.['Ending Balance Offset'] === 0 && (
                      <div className="success-message-container accuracy-success">
-                        <p className="success-message"> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
+                        <p className="success-message" style={typographyStyles.text}> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
                      </div>
                    )}
                    <StatementSummary metaData={dataToShow.meta_data} />
                  </>
                ) : ( 
                  /* Show empty structure if no data yet, even before preview exists */
-                 <div className="summary-card"> {/* Mimic the StatementSummary structure */}
+                 <div className="summary-card" style={{ fontFamily: typographyStyles.fontFamily }}> {/* Mimic the StatementSummary structure */}
                     <div className="summary-header">
-                      <h3>Account Summary</h3>
+                      <h3 style={typographyStyles.subheading}>Account Summary</h3>
                       <div className="skeleton-badge"></div>
                     </div>
                     <div className="summary-body">
                       <div className="summary-columns">
                         <div className="summary-column">
                           <div className="summary-row">
-                            <div className="summary-label">Customer</div>
-                            <div className="summary-value"></div>
+                            <div className="summary-label" style={typographyStyles.label}>Customer</div>
+                            <div className="summary-value" style={{...typographyStyles.text, fontWeight: 700}}></div>
                           </div>
                           <div className="summary-row">
-                            <div className="summary-label">Account Number</div>
-                            <div className="summary-value account-number"></div>
+                            <div className="summary-label" style={typographyStyles.label}>Account Number</div>
+                            <div className="summary-value account-number" style={{...typographyStyles.text, fontWeight: 700}}></div>
                           </div>
                           <div className="summary-row">
-                            <div className="summary-label">Statement Period</div>
-                            <div className="summary-value"></div>
+                            <div className="summary-label" style={typographyStyles.label}>Statement Period</div>
+                            <div className="summary-value" style={{...typographyStyles.text, fontWeight: 700}}></div>
                           </div>
                         </div>
                         
                         <div className="summary-column">
                           <div className="summary-row">
-                            <div className="summary-label">Starting Balance</div>
-                            <div className="summary-value"></div>
+                            <div className="summary-label" style={typographyStyles.label}>Starting Balance</div>
+                            <div className="summary-value" style={{...typographyStyles.text, fontWeight: 700}}></div>
                           </div>
                           <div className="summary-row">
-                            <div className="summary-label">Ending Balance</div>
-                            <div className="summary-value fw-bold"></div>
+                            <div className="summary-label" style={typographyStyles.label}>Ending Balance</div>
+                            <div className="summary-value fw-bold" style={{...typographyStyles.text, fontWeight: 700}}></div>
                           </div>
                           <div className="summary-row balance-offset">
-                            <div className="summary-label">Balance Offset</div>
-                            <div className="summary-value text-muted"></div>
+                            <div className="summary-label" style={typographyStyles.label}>Balance Offset</div>
+                            <div className="summary-value text-muted" style={{...typographyStyles.smallText, fontWeight: 700}}></div>
                           </div>
                         </div>
                       </div>
@@ -727,25 +767,25 @@ function NewRequestPage() {
                       <div className="transaction-overview">
                         <div className="overview-header">
                           <div className="total-transactions">
-                            <span className="transaction-count">0</span>
-                            <span className="transaction-label">Transactions</span>
+                            <span className="transaction-count" style={{...typographyStyles.heading, fontWeight: 700}}>0</span>
+                            <span className="transaction-label" style={{...typographyStyles.smallText, fontWeight: 600}}>Transactions</span>
                           </div>
                         </div>
                         
                         <div className="transaction-summary">
                           <div className="transaction-type credits">
-                            <div className="transaction-amount">$0.00</div>
+                            <div className="transaction-amount" style={{...typographyStyles.text, fontWeight: 700}}>$0.00</div>
                             <div className="transaction-details">
-                              <div className="transaction-label">Credits</div>
-                              <div className="transaction-count">0 transactions</div>
+                              <div className="transaction-label" style={{...typographyStyles.label, fontWeight: 600}}>Credits</div>
+                              <div className="transaction-count" style={{...typographyStyles.smallText, fontWeight: 600}}>0 transactions</div>
                             </div>
                           </div>
                           
                           <div className="transaction-type debits">
-                            <div className="transaction-amount">$0.00</div>
+                            <div className="transaction-amount" style={{...typographyStyles.text, fontWeight: 700}}>$0.00</div>
                             <div className="transaction-details">
-                              <div className="transaction-label">Debits</div>
-                              <div className="transaction-count">0 transactions</div>
+                              <div className="transaction-label" style={{...typographyStyles.label, fontWeight: 600}}>Debits</div>
+                              <div className="transaction-count" style={{...typographyStyles.smallText, fontWeight: 600}}>0 transactions</div>
                             </div>
                           </div>
                         </div>
@@ -761,7 +801,7 @@ function NewRequestPage() {
                     <iframe src={previewUrlToShow} width="100%" height="800px" title="PDF Preview" />
                   ) : (
                     <div className="empty-preview" style={{height: '800px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5', border: '1px dashed #ccc'}}> 
-                      <p>Upload a PDF to see the preview here</p> 
+                      <p style={typographyStyles.text}>Upload a PDF to see the preview here</p> 
                     </div>
                  )}
                </div>
