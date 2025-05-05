@@ -36,6 +36,8 @@ const formatCurrency = (amount, isDeposit) => {
 function TransactionsTable({ transactions = [] }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  // Store original transactions for reference
+  const originalTransactions = useMemo(() => transactions, [transactions]);
   
   // Handle search input change
   const handleSearchChange = (e) => {
@@ -45,8 +47,14 @@ function TransactionsTable({ transactions = [] }) {
   // Handle column sort
   const requestSort = (key) => {
     let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
+    if (sortConfig.key === key) {
+      if (sortConfig.direction === 'asc') {
+        direction = 'desc';
+      } else if (sortConfig.direction === 'desc') {
+        direction = 'original';
+      } else {
+        direction = 'asc';
+      }
     }
     setSortConfig({ key, direction });
   };
@@ -63,7 +71,20 @@ function TransactionsTable({ transactions = [] }) {
       );
     }
     
-    // Sort transactions
+    // If sort direction is 'original', return filtered but in original order
+    if (sortConfig.direction === 'original') {
+      // Apply only filtering to original transactions order
+      return originalTransactions.filter(origTx => 
+        filtered.some(filteredTx => 
+          // Match original transactions with filtered ones
+          filteredTx.date === origTx.date && 
+          filteredTx.description === origTx.description && 
+          filteredTx.amount === origTx.amount
+        )
+      );
+    }
+    
+    // Otherwise sort transactions
     return [...filtered].sort((a, b) => {
       if (a[sortConfig.key] < b[sortConfig.key]) {
         return sortConfig.direction === 'asc' ? -1 : 1;
@@ -73,12 +94,14 @@ function TransactionsTable({ transactions = [] }) {
       }
       return 0;
     });
-  }, [transactions, searchTerm, sortConfig]);
+  }, [transactions, originalTransactions, searchTerm, sortConfig]);
   
   // Get sort class for column headers
   const getSortClass = (key) => {
     if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? 'sort-asc' : 'sort-desc';
+    if (sortConfig.direction === 'asc') return 'sort-asc';
+    if (sortConfig.direction === 'desc') return 'sort-desc';
+    return 'sort-original';
   };
   
   // Calculate total deposits and withdrawals

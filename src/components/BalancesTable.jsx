@@ -27,18 +27,32 @@ const formatCurrency = (amount) => {
 
 function BalancesTable({ balances = [] }) {
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  // Store original balances for reference
+  const originalBalances = useMemo(() => balances, [balances]);
   
   // Handle column sort
   const requestSort = (key) => {
     let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
+    if (sortConfig.key === key) {
+      if (sortConfig.direction === 'asc') {
+        direction = 'desc';
+      } else if (sortConfig.direction === 'desc') {
+        direction = 'original';
+      } else {
+        direction = 'asc';
+      }
     }
     setSortConfig({ key, direction });
   };
   
   // Sort balances
   const sortedBalances = useMemo(() => {
+    // If sort direction is 'original', return in original order
+    if (sortConfig.direction === 'original') {
+      return [...originalBalances];
+    }
+    
+    // Otherwise sort balances
     return [...balances].sort((a, b) => {
       if (a[sortConfig.key] < b[sortConfig.key]) {
         return sortConfig.direction === 'asc' ? -1 : 1;
@@ -48,12 +62,14 @@ function BalancesTable({ balances = [] }) {
       }
       return 0;
     });
-  }, [balances, sortConfig]);
+  }, [balances, originalBalances, sortConfig]);
   
   // Get sort class for column headers
   const getSortClass = (key) => {
     if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? 'sort-asc' : 'sort-desc';
+    if (sortConfig.direction === 'asc') return 'sort-asc';
+    if (sortConfig.direction === 'desc') return 'sort-desc';
+    return 'sort-original';
   };
   
   // Calculate min, max, and average balances

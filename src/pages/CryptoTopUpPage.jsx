@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { selectUser, getSessionThunk } from '../store/authSlice';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
-import UserCredits from '../components/UserCredits';
+import '../styles/CryptoTopUp.css';
 
 function CryptoTopUpPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -17,6 +17,22 @@ function CryptoTopUpPage() {
   const [credits, setCredits] = useState(0);
   const [paymentSuccessful, setPaymentSuccessful] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [useCustomAmount, setUseCustomAmount] = useState(false);
+  const [selectedOption, setSelectedOption] = useState(1); // Default to first option
+  
+  // Preset amount options (USD)
+  const amountOptions = [
+    { value: 10, credits: 10 },
+    { value: 25, credits: 25 },
+    { value: 50, credits: 50 },
+    { value: 100, credits: 100 },
+    { value: 250, credits: 250 },
+    { value: 500, credits: 500 },
+    { value: 1000, credits: 1000 },
+    { value: 2500, credits: 2500 },
+    { value: 5000, credits: 5000 },
+  ];
   
   const user = useSelector(selectUser);
   const dispatch = useDispatch();
@@ -63,6 +79,25 @@ function CryptoTopUpPage() {
   useEffect(() => {
     handleNowPaymentsReturn();
   }, []);
+
+  // Handle option selection
+  const handleOptionSelect = (index) => {
+    setSelectedOption(index);
+    setAmountUSD(amountOptions[index].value);
+    setUseCustomAmount(false);
+  };
+
+  // Handle custom amount checkbox toggle
+  const handleCustomAmountToggle = () => {
+    setUseCustomAmount(!useCustomAmount);
+    if (!useCustomAmount) {
+      setSelectedOption(null);
+    } else {
+      // When disabling custom amount, go back to selected option or default
+      setSelectedOption(selectedOption !== null ? selectedOption : 0);
+      setAmountUSD(selectedOption !== null ? amountOptions[selectedOption].value : amountOptions[0].value);
+    }
+  };
 
   // Create a request record for the top-up
   const createTopUpRequest = async (amount) => {
@@ -124,6 +159,7 @@ function CryptoTopUpPage() {
     setLoadingMessage('Preparing payment invoice...');
     setPaymentStatus('pending_creation');
     setNowPaymentsUrl('');
+    setCurrentStep(2);
 
     try {
       // Create initial request record
@@ -148,6 +184,7 @@ function CryptoTopUpPage() {
 
       console.log("Received NowPayments URL:", invoiceUrl);
       setNowPaymentsUrl(invoiceUrl);
+      setCurrentStep(3);
 
       if (isDevelopment) {
         // In Dev: Don't redirect automatically. Show info and simulate button.
@@ -167,6 +204,7 @@ function CryptoTopUpPage() {
       setIsLoading(false);
       setPaymentStatus('failed');
       setShowSimulateButton(false);
+      setCurrentStep(1);
       
       // Update request record on failure if it was created
       if (currentRequestId) {
@@ -190,6 +228,7 @@ function CryptoTopUpPage() {
     setLoadingMessage('Simulating successful payment...');
     setError('');
     setShowSimulateButton(false);
+    setCurrentStep(4);
 
     try {
       const { data, error: functionError } = await supabase.functions.invoke(
@@ -204,6 +243,7 @@ function CryptoTopUpPage() {
       setLoadingMessage('Simulation successful. Waiting for confirmation...');
       setPaymentSuccessful(true);
       setPaymentStatus('succeeded');
+      setCurrentStep(5);
       
       // Store payment success in localStorage to persist through reload
       localStorage.setItem('paymentSuccessful', 'true');
@@ -217,6 +257,7 @@ function CryptoTopUpPage() {
       setError(`Simulation failed: ${err.message}`);
       setIsLoading(false);
       setLoadingMessage('');
+      setCurrentStep(3);
     }
   };
 
@@ -238,6 +279,7 @@ function CryptoTopUpPage() {
         setIsLoading(true);
         setPaymentStatus('confirming');
         setError('');
+        setCurrentStep(4);
         
         // Set up a realtime subscription to listen for payment updates
         const channel = supabase
@@ -257,6 +299,7 @@ function CryptoTopUpPage() {
               setIsLoading(false);
               setLoadingMessage('Payment successful! Your credits have been added.');
               setPaymentSuccessful(true);
+              setCurrentStep(5);
               // Refresh the page after a short delay to show updated credits
               setTimeout(() => {
                 window.location.reload();
@@ -265,6 +308,7 @@ function CryptoTopUpPage() {
               setIsLoading(false);
               setError(`Payment ${newStatus}. Please try again.`);
               setLoadingMessage('');
+              setCurrentStep(1);
             }
           })
           .subscribe();
@@ -279,6 +323,7 @@ function CryptoTopUpPage() {
         setPaymentStatus('canceled');
         setIsLoading(false);
         setLoadingMessage('');
+        setCurrentStep(1);
       }
     }
   }, []);
@@ -289,6 +334,7 @@ function CryptoTopUpPage() {
     if (query.get('payment_status') === 'success' || localStorage.getItem('paymentSuccessful') === 'true') {
       setPaymentSuccessful(true);
       setPaymentStatus('succeeded');
+      setCurrentStep(5);
       
       // Clear localStorage after reading it
       if (localStorage.getItem('paymentSuccessful') === 'true') {
@@ -301,75 +347,137 @@ function CryptoTopUpPage() {
     }
   }, []);
 
+  // Get step class based on current step and step number
+  const getStepClass = (stepNumber) => {
+    if (currentStep > stepNumber) return "step completed";
+    if (currentStep === stepNumber) return "step active";
+    return "step";
+  };
+
   return (
-    <div className="container mx-auto max-w-2xl p-4">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '10px', borderBottom: '1px solid #eee' }}>
-        <h1 className="text-2xl font-bold">Top Up Credits with Cryptocurrency</h1>
+    <div className="crypto-container">
+      <header className="page-header">
+        <h1 className="page-title">Top Up Credits</h1>
       </header>
+      
+      {/* Payment progress steps */}
+      {!paymentSuccessful && (
+        <div className="payment-steps">
+          <div className={getStepClass(1)}>
+            <div className="step-number">1</div>
+            <div className="step-label">Select Amount</div>
+          </div>
+          <div className={getStepClass(2)}>
+            <div className="step-number">2</div>
+            <div className="step-label">Create Invoice</div>
+          </div>
+          <div className={getStepClass(3)}>
+            <div className="step-number">3</div>
+            <div className="step-label">Payment</div>
+          </div>
+          <div className={getStepClass(4)}>
+            <div className="step-number">4</div>
+            <div className="step-label">Processing</div>
+          </div>
+          <div className={getStepClass(5)}>
+            <div className="step-number">5</div>
+            <div className="step-label">Complete</div>
+          </div>
+        </div>
+      )}
       
       {/* Show success message if payment was successful, regardless of user state */}
       {(paymentStatus === 'succeeded' || paymentSuccessful) ? (
-        <div className="bg-green-100 p-4 rounded-lg mb-6">
-          <p className="text-green-700">
-            Payment successful! Your account has been credited.
-          </p>
+        <div className="alert alert-success">
+          <h2 className="card-title">Payment Successful!</h2>
+          <p>Your account has been credited with the purchased amount.</p>
           <button
             onClick={() => navigate('/')}
-            className="mt-4 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+            className="btn btn-primary mt-4"
           >
             Return to Home
           </button>
         </div>
       ) : isAuthLoading ? (
-        <div className="flex items-center justify-center p-6">
-          <div className="spinner mr-3"></div>
+        <div className="loading-container">
+          <div className="spinner"></div>
           <p>Loading your account...</p>
         </div>
       ) : user ? (
         <>
-          <div className="bg-gray-100 p-4 rounded-lg mb-6">
-            <p className="text-lg">Current Credits: <span className="font-bold">{credits}</span></p>
+          <div className="credits-card">
+            <p className="credits-label">Current Credits</p>
+            <p className="credits-value">{credits}</p>
           </div>
           
           {!isLoading && !nowPaymentsUrl && (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-              <h2 className="text-xl font-semibold mb-4">Select Amount to Top Up</h2>
+            <div className="payment-card">
+              <h2 className="card-title">Select Amount to Top Up</h2>
               
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-2">Amount (USD)</label>
-                <input
-                  type="number"
-                  min="5"
-                  value={amountUSD}
-                  onChange={(e) => setAmountUSD(Number(e.target.value))}
-                  className="w-full p-2 border rounded"
-                />
-                <p className="text-sm text-gray-500 mt-1">Minimum amount: $5</p>
+              {/* Preset amount options */}
+              <div className="amount-options">
+                {amountOptions.map((option, index) => (
+                  <div
+                    key={index}
+                    className={`amount-option ${selectedOption === index && !useCustomAmount ? 'selected' : ''}`}
+                    onClick={() => handleOptionSelect(index)}
+                  >
+                    <div className="amount-option-value">${option.value}</div>
+                    <div className="amount-option-credits">{option.credits} credits</div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Custom amount option */}
+              <div className="custom-amount">
+                <label className="custom-amount-label">
+                  <input
+                    type="checkbox"
+                    className="custom-amount-checkbox"
+                    checked={useCustomAmount}
+                    onChange={handleCustomAmountToggle}
+                  />
+                  Custom Amount
+                </label>
+                
+                {useCustomAmount && (
+                  <div>
+                    <input
+                      type="number"
+                      min="5"
+                      value={amountUSD}
+                      onChange={(e) => setAmountUSD(Number(e.target.value))}
+                      className="amount-input"
+                    />
+                    <p className="amount-help">Minimum amount: $5</p>
+                  </div>
+                )}
               </div>
               
               <button
                 onClick={handlePayment}
-                className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+                className="btn btn-primary btn-full"
+                style={{ marginTop: '1.5rem' }}
               >
-                Pay with Cryptocurrency
+                Pay
               </button>
             </div>
           )}
           
           {isLoading && (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-              <div className="flex items-center justify-center">
-                <div className="spinner mr-3"></div>
+            <div className="payment-card">
+              <div className="loading-container">
+                <div className="spinner"></div>
                 <p>{loadingMessage}</p>
               </div>
             </div>
           )}
           
           {showSimulateButton && isDevelopment && (
-            <div className="mt-4">
+            <div className="payment-card">
               <button
                 onClick={handleSimulatePayment}
-                className="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded"
+                className="btn btn-secondary btn-full mb-4"
               >
                 Simulate Successful Payment
               </button>
@@ -379,7 +487,7 @@ function CryptoTopUpPage() {
                   href={nowPaymentsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block mt-2 text-blue-500 hover:underline"
+                  className="payment-link"
                 >
                   Open Payment Page Manually
                 </a>
@@ -388,17 +496,17 @@ function CryptoTopUpPage() {
           )}
           
           {error && (
-            <div className="bg-red-100 p-4 rounded-lg mb-6">
-              <p className="text-red-700">{error}</p>
+            <div className="alert alert-error">
+              <p>{error}</p>
             </div>
           )}
         </>
       ) : (
-        <div className="bg-yellow-100 p-6 rounded-lg">
-          <p className="text-yellow-700 mb-4">Please sign in to top up your credits.</p>
+        <div className="alert alert-warning">
+          <p>Please sign in to top up your credits.</p>
           <button
             onClick={() => navigate('/')}
-            className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+            className="btn btn-primary mt-4"
           >
             Go to Home Page
           </button>

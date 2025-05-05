@@ -128,7 +128,7 @@ function StatementSummary({ metaData }) {
             </div>
             <div className="summary-row balance-offset">
               <div className="summary-label">Balance Offset</div>
-              <div className="summary-value text-muted">{balanceOffset || 'None'}</div>
+              <div className="summary-value text-muted">{balanceOffset}</div>
             </div>
           </div>
         </div>

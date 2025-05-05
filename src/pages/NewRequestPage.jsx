@@ -48,6 +48,9 @@ function NewRequestPage() {
   const [createdAtTime, setCreatedAtTime] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [totalDuration, setTotalDuration] = useState(0);
+  // User credits state
+  const [userCredits, setUserCredits] = useState(0);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(false);
 
   // --- Test State (kept from original for consistency) ---
   const [testFilePreviewUrl, setTestFilePreviewUrl] = useState(null);
@@ -78,6 +81,34 @@ function NewRequestPage() {
       }
     };
   }, [dispatch]);
+
+  // Fetch user credits
+  useEffect(() => {
+    const fetchUserCredits = async () => {
+      if (!user) {
+        return;
+      }
+      
+      try {
+        setIsLoadingCredits(true);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('credits_remaining')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) throw error;
+        
+        setUserCredits(data?.credits_remaining || 0);
+      } catch (err) {
+        console.error('Error fetching user credits:', err);
+      } finally {
+        setIsLoadingCredits(false);
+      }
+    };
+    
+    fetchUserCredits();
+  }, [user]);
 
   // --- Functions moved from App.jsx ---
 
@@ -310,6 +341,13 @@ function NewRequestPage() {
           return;
       }
 
+      // Check if user has enough credits
+      const requiredCredits = pageCount * 0.1;
+      if (userCredits < requiredCredits) {
+          setError(`Not enough credits. You need ${requiredCredits.toFixed(1)} credits but have ${userCredits.toFixed(1)}. Please top up your credits.`);
+          return;
+      }
+
       setIsLoading(true); // Start loading
       setLoadingMessage('Uploading file and preparing analysis...'); // Initial message
       setError('');
@@ -521,13 +559,47 @@ function NewRequestPage() {
                style={{ display: 'none' }} // Hide the default input
              />
              {/* Styled label acting as the button */}
-             <label
-               htmlFor="file-upload"
-               className={`cta-button ${isLoading || (!!currentRequestId && parsingStatus !== 'pending' && parsingStatus !== 'error') ? 'disabled' : ''}`}
-               // Apply disabled appearance if needed via CSS
-             >
-               {file ? `Selected: ${file.name}` : 'Choose PDF File'}
-             </label>
+             {!file ? (
+               <label
+                 htmlFor="file-upload"
+                 className={`cta-button ${isLoading ? 'disabled' : ''}`}
+               >
+                 Choose PDF File
+               </label>
+             ) : (
+               <>
+                 {/* Keep consistent button size, but with action appropriate for state */}
+                 {user && !isLoading && (!parsingStatus || parsingStatus === 'pending' || parsingStatus === 'error') ? (
+                   <button 
+                     onClick={triggerParsing} 
+                     disabled={pageCount === 0 || userCredits < (pageCount * 0.1)} 
+                     className="cta-button"
+                     style={{width: '150px'}} // Fixed width for consistency
+                   >
+                     {parsingStatus === 'error' ? 'Retry Parsing' : 'Start Parsing'}
+                   </button>
+                 ) : (
+                   <button 
+                     className="cta-button" 
+                     disabled={true}
+                     style={{width: '150px'}} // Fixed width for consistency
+                   >
+                     Processing...
+                   </button>
+                 )}
+                 
+                 {/* Show file information separately */}
+                 <div className="file-info" style={{marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '5px', display: 'flex', alignItems: 'center'}}>
+                   <div style={{flex: 1}}>
+                     <p style={{margin: '0'}}><strong>File:</strong> {file.name}</p>
+                     <p style={{margin: '5px 0 0'}}><strong>Pages:</strong> {pageCount} ({(pageCount * 0.1).toFixed(1)} credits)</p>
+                     {pageCount > 0 && userCredits < (pageCount * 0.1) && (
+                       <p style={{margin: '5px 0 0', color: 'red'}}><strong>Not enough credits!</strong> You need {(pageCount * 0.1).toFixed(1)} credits but have {userCredits.toFixed(1)}. <a href="/top-up">Top up</a></p>
+                     )}
+                   </div>
+                 </div>
+               </>
+             )}
            </div>
 
            {/* User Messages & Loading Indicators */}
@@ -581,79 +653,127 @@ function NewRequestPage() {
                })()
            )}
 
-           {/* Action Button Section */}
-           <div className="action-section">
-               {/* Show Start Parsing button only if file selected, user logged in, and parsing hasn't started/finished/failed */}
-               {file && user && !isLoading && (!parsingStatus || parsingStatus === 'pending' || parsingStatus === 'error') && (
-                   <button onClick={triggerParsing} disabled={!file || pageCount === 0} className="cta-button">
-                       {parsingStatus === 'error' ? 'Retry Parsing' : 'Start Parsing'} ({pageCount} pages)
-                   </button>
-               )}
-               {/* Message if parsing is complete or already in progress */}
-               {user && currentRequestId && (parsingStatus === 'processing' || parsingStatus === 'initiated') && <p>Parsing is currently in progress...</p>}
-               {user && currentRequestId && parsingStatus === 'success' && <p>Parsing complete. See results below.</p>}
-           </div>
+           {/* Message if parsing is complete or already in progress */}
+           {user && currentRequestId && (parsingStatus === 'processing' || parsingStatus === 'initiated') && <p>Parsing is currently in progress...</p>}
+           {user && currentRequestId && parsingStatus === 'success' && <p>Parsing complete. See results below.</p>}
 
            {/* --- RESULTS SECTION --- */}
-           {/* Only render results section if there's a preview URL or parsed data */}
-           {(previewUrlToShow || dataToShow) && (
-             <div className="results-section" style={{marginTop: '30px'}}>
-                {parsedData && !isLoading && !error && (
-                   <div className="success-message-container"> <p className="success-message">✅ Parsing completed successfully!</p> </div>
-                )}
-                <div className="results-header">
-                  <h2>Results {showTestDataResults ? '(Test Preview)' : ''}</h2>
-                  <div className="results-actions">
-                     {/* Reset button */}
-                     <button onClick={resetState} className="cta-button secondary" style={{marginRight: '10px'}}>Start New</button>
-                    {(showNormalResults || showTestDataResults) && (
-                       <button onClick={handleDownloadJson} className="cta-button download-button"> Download JSON </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="summary-section">
-                  {(showNormalResults || showTestDataResults) ? (
-                    <>
-                      {dataToShow?.meta_data?.['Ending Balance Offset'] === 0 && (
-                        <div className="success-message-container accuracy-success">
-                           <p className="success-message"> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
-                        </div>
-                      )}
-                      <StatementSummary metaData={dataToShow.meta_data} />
-                    </>
-                  ) : ( /* Show empty structure if no data yet but preview exists */
-                    previewUrlToShow && (
-                       <div className="summary-container"> {/* Placeholder structure */}
-                          <h3>Summary</h3>
-                          <div className="summary-grid">
-                              <div><strong>Bank:</strong></div> <div><strong>Customer:</strong></div> <div><strong>Account Number:</strong></div> <div><strong>Offset:</strong></div>
-                              <div><strong>Starting Date:</strong></div> <div><strong>Ending Date:</strong></div> <div><strong>Starting Balance:</strong></div> <div><strong>Ending Balance:</strong></div>
-                              <div><strong>Transactions:</strong></div> <div><strong>Credits:</strong></div> <div><strong>Debits:</strong></div>
-                           </div>
-                       </div>
-                    )
+           {/* Show placeholder sections even before PDF upload */}
+           <div className="results-section" style={{marginTop: '30px'}}>
+             {parsedData && !isLoading && !error && (
+                <div className="success-message-container"> <p className="success-message">✅ Parsing completed successfully!</p> </div>
+             )}
+             <div className="results-header">
+               <h2>Results {showTestDataResults ? '(Test Preview)' : (!previewUrlToShow && !dataToShow ? '(Preview)' : '')}</h2>
+               <div className="results-actions">
+                  {(showNormalResults || showTestDataResults) && (
+                    <button onClick={handleDownloadJson} className="cta-button download-button"> Download JSON </button>
                   )}
-                </div> {/* End summary-section */}
+               </div>
+             </div>
 
-                <div className="results-content">
-                  <div className="pdf-column">
-                    {previewUrlToShow ? (
-                       <iframe src={previewUrlToShow} width="100%" height="800px" title="PDF Preview" />
-                     ) : (
-                       <div className="empty-preview"> <p>PDF preview appears here.</p> </div>
-                    )}
-                  </div>
-                  <div className="right-column">
-                    <div className="transactions-column">
-                      <TransactionsTable transactions={(showNormalResults || showTestDataResults) ? dataToShow.transactions_data : []} />
+             <div className="summary-section">
+               {(showNormalResults || showTestDataResults) ? (
+                 <>
+                   {dataToShow?.meta_data?.['Ending Balance Offset'] === 0 && (
+                     <div className="success-message-container accuracy-success">
+                        <p className="success-message"> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
+                     </div>
+                   )}
+                   <StatementSummary metaData={dataToShow.meta_data} />
+                 </>
+               ) : ( 
+                 /* Show empty structure if no data yet, even before preview exists */
+                 <div className="summary-card"> {/* Mimic the StatementSummary structure */}
+                    <div className="summary-header">
+                      <h3>Account Summary</h3>
+                      <div className="skeleton-badge"></div>
                     </div>
-                    <BalancesTable balances={(showNormalResults || showTestDataResults) ? dataToShow.balances : []} />
-                  </div>
-                </div> {/* End results-content */}
+                    <div className="summary-body">
+                      <div className="summary-columns">
+                        <div className="summary-column">
+                          <div className="summary-row">
+                            <div className="summary-label">Customer</div>
+                            <div className="summary-value"></div>
+                          </div>
+                          <div className="summary-row">
+                            <div className="summary-label">Account Number</div>
+                            <div className="summary-value account-number"></div>
+                          </div>
+                          <div className="summary-row">
+                            <div className="summary-label">Statement Period</div>
+                            <div className="summary-value"></div>
+                          </div>
+                        </div>
+                        
+                        <div className="summary-column">
+                          <div className="summary-row">
+                            <div className="summary-label">Starting Balance</div>
+                            <div className="summary-value"></div>
+                          </div>
+                          <div className="summary-row">
+                            <div className="summary-label">Ending Balance</div>
+                            <div className="summary-value fw-bold"></div>
+                          </div>
+                          <div className="summary-row balance-offset">
+                            <div className="summary-label">Balance Offset</div>
+                            <div className="summary-value text-muted"></div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="summary-divider"></div>
+                      
+                      <div className="transaction-overview">
+                        <div className="overview-header">
+                          <div className="total-transactions">
+                            <span className="transaction-count">0</span>
+                            <span className="transaction-label">Transactions</span>
+                          </div>
+                        </div>
+                        
+                        <div className="transaction-summary">
+                          <div className="transaction-type credits">
+                            <div className="transaction-amount">$0.00</div>
+                            <div className="transaction-details">
+                              <div className="transaction-label">Credits</div>
+                              <div className="transaction-count">0 transactions</div>
+                            </div>
+                          </div>
+                          
+                          <div className="transaction-type debits">
+                            <div className="transaction-amount">$0.00</div>
+                            <div className="transaction-details">
+                              <div className="transaction-label">Debits</div>
+                              <div className="transaction-count">0 transactions</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                 </div>
+               )}
+             </div> {/* End summary-section */}
 
-             </div> /* End results-section */
-           )} {/* End conditional rendering of results section */}
+             <div className="results-content">
+               <div className="pdf-column">
+                 {previewUrlToShow ? (
+                    <iframe src={previewUrlToShow} width="100%" height="800px" title="PDF Preview" />
+                  ) : (
+                    <div className="empty-preview" style={{height: '800px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5', border: '1px dashed #ccc'}}> 
+                      <p>Upload a PDF to see the preview here</p> 
+                    </div>
+                 )}
+               </div>
+               <div className="right-column">
+                 <div className="transactions-column">
+                   <TransactionsTable transactions={(showNormalResults || showTestDataResults) ? dataToShow.transactions_data : []} />
+                 </div>
+                 <BalancesTable balances={(showNormalResults || showTestDataResults) ? dataToShow.balances : []} />
+               </div>
+             </div> {/* End results-content */}
+
+           </div> {/* End results-section */}
 
          </> /* End user logged in content */
       )}

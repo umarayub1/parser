@@ -23,6 +23,7 @@ import {
 // Import pages
 import NewRequestPage from './pages/NewRequestPage';
 import CryptoTopUpPage from './pages/CryptoTopUpPage';
+import ProfilePage from './pages/ProfilePage';
 
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
 
@@ -80,6 +81,23 @@ function App() {
 
   const navigate = useNavigate(); // <<< Initialize navigate
   const location = useLocation();
+
+  // --- Auth State (from Redux) ---
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  
+  // Add click outside listener to close profile dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileDropdownOpen && !event.target.closest('.profile-dropdown-container')) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [profileDropdownOpen]);
 
   // --- Auth Listener -> Dispatch to Redux ---
   useEffect(() => {
@@ -961,7 +979,19 @@ function App() {
 
   // Determine active link
   const isActive = (path) => {
-    return location.pathname === path;
+    if (path === '/') {
+      return location.pathname === '/';
+    }
+    if (path === '/new-request') {
+      return location.pathname === '/new-request';
+    }
+    if (path === '/top-up') {
+      return location.pathname === '/top-up';
+    }
+    if (path === '/profile') {
+      return location.pathname === '/profile';
+    }
+    return location.pathname.startsWith(path);
   };
 
   // --- Render Logic (Dashboard View) ---
@@ -983,21 +1013,21 @@ function App() {
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                     <polyline points="9 22 9 12 15 12 15 22"></polyline>
                   </svg>
-                  Dashboard
+                  <span className="nav-text">Dashboard</span>
                 </Link>
                 <Link to="/new-request" className={`nav-link ${isActive('/new-request') ? 'active' : ''}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
-                  New Request
+                  <span className="nav-text">New Request</span>
                 </Link>
-                <Link to="/crypto-top-up" className={`nav-link ${isActive('/crypto-top-up') ? 'active' : ''}`}>
+                <Link to="/top-up" className={`nav-link ${isActive('/top-up') ? 'active' : ''}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="1" x2="12" y2="23"></line>
                     <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                   </svg>
-                  Top Up Credits
+                  <span className="nav-text">Top Up</span>
                 </Link>
               </div>
             )}
@@ -1006,23 +1036,73 @@ function App() {
               {user ? (
                 <div className="user-info">
                   <UserCredits />
-                  <span className="user-email">{user.email}</span>
-                  <button 
-                    className="auth-button sign-out" 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log("Sign out button clicked directly");
-                      handleSignOut();
-                    }} 
-                    disabled={authLoading === 'pending'}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                      <polyline points="16 17 21 12 16 7"></polyline>
-                      <line x1="21" y1="12" x2="9" y2="12"></line>
-                    </svg>
-                    Sign Out
-                  </button>
+                  <div className="profile-dropdown-container">
+                    <div 
+                      className="profile-dropdown-trigger"
+                      onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                    >
+                      {user.user_metadata?.avatar_url ? (
+                        <img 
+                          src={user.user_metadata.avatar_url} 
+                          alt="Profile" 
+                          className="user-avatar" 
+                        />
+                      ) : (
+                        <div className="user-avatar-placeholder">
+                          {user.email?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {profileDropdownOpen && (
+                      <div className="profile-dropdown-menu">
+                        <div className="dropdown-user-info">
+                          {user.user_metadata?.avatar_url && (
+                            <img 
+                              src={user.user_metadata.avatar_url} 
+                              alt="Profile" 
+                              className="dropdown-user-avatar" 
+                            />
+                          )}
+                          <div className="dropdown-user-details">
+                            <span className="dropdown-user-name">
+                              {user.user_metadata?.full_name || user.email?.split('@')[0]}
+                            </span>
+                            <span className="dropdown-user-email">{user.email}</span>
+                          </div>
+                        </div>
+                        <div className="dropdown-divider"></div>
+                        <Link 
+                          to="/profile"
+                          className="dropdown-item profile-item"
+                          onClick={() => setProfileDropdownOpen(false)}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                          </svg>
+                          My Profile
+                        </Link>
+                        <div className="dropdown-divider"></div>
+                        <button 
+                          className="dropdown-item sign-out-item" 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleSignOut();
+                            setProfileDropdownOpen(false);
+                          }} 
+                          disabled={authLoading === 'pending'}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                          </svg>
+                          Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="auth-buttons">
@@ -1088,8 +1168,9 @@ function App() {
               } 
             />
             <Route path="/new-request" element={<NewRequestPage />} />
-            <Route path="/crypto-top-up" element={<CryptoTopUpPage />} />
+            <Route path="/top-up" element={<CryptoTopUpPage />} />
             <Route path="/requests/:id" element={<RequestPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Routes>
         )}
       </main>
