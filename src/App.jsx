@@ -1018,6 +1018,32 @@ function App() {
     return location.pathname.startsWith(path);
   };
 
+  // Add state for mobile navigation
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  
+  // Toggle mobile navigation
+  const toggleMobileNav = () => {
+    setMobileNavOpen(!mobileNavOpen);
+    // When opening menu, also prevent body scrolling and add menu-open class
+    document.body.style.overflow = !mobileNavOpen ? 'hidden' : '';
+    
+    if (!mobileNavOpen) {
+      document.body.classList.add('menu-open');
+      document.documentElement.classList.add('menu-open');
+    } else {
+      document.body.classList.remove('menu-open');
+      document.documentElement.classList.remove('menu-open');
+    }
+  };
+  
+  // Close mobile nav when route changes
+  useEffect(() => {
+    setMobileNavOpen(false);
+    document.body.style.overflow = '';
+    document.body.classList.remove('menu-open');
+    document.documentElement.classList.remove('menu-open');
+  }, [location.pathname]);
+
   // --- Render Logic (Dashboard View) ---
   return (
     <div className="main-layout">
@@ -1031,38 +1057,46 @@ function App() {
           </div>
           
           <div className="header-controls">
-            {user && (
-              <div className="nav-links">
-                <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                  </svg>
-                  <span className="nav-text">Dashboard</span>
-                </Link>
-                <Link to="/new-request" className={`nav-link ${isActive('/new-request') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                  <span className="nav-text">New Request</span>
-                </Link>
-                <Link to="/top-up" className={`nav-link ${isActive('/top-up') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="1" x2="12" y2="23"></line>
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                  </svg>
-                  <span className="nav-text">Top Up</span>
-                </Link>
-                <Link to="/contact" className={`nav-link ${isActive('/contact') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                  </svg>
-                  <span className="nav-text">Contact</span>
-                </Link>
-              </div>
-            )}
+            <div className="nav-links">
+              <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span className="nav-text">Home</span>
+              </Link>
+              <Link to="/new-request" className={`nav-link ${isActive('/new-request') ? 'active' : ''}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span className="nav-text">New Request</span>
+              </Link>
+              <Link to="/top-up" className={`nav-link ${isActive('/top-up') ? 'active' : ''}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="1" x2="12" y2="23"></line>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                <span className="nav-text">Top Up</span>
+              </Link>
+              <Link to="/contact" className={`nav-link ${isActive('/contact') ? 'active' : ''}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+                <span className="nav-text">Contact</span>
+              </Link>
+            </div>
             
+            {/* Add hamburger menu for mobile */}
+            <div 
+              className={`hamburger-menu ${mobileNavOpen ? 'active' : ''}`} 
+              onClick={toggleMobileNav}
+            >
+              <span className="hamburger-line"></span>
+              <span className="hamburger-line"></span>
+              <span className="hamburger-line"></span>
+            </div>
+
             <div className="auth-section">
               {user ? (
                 <div className="user-info">
@@ -1156,6 +1190,95 @@ function App() {
         </div>
       </header>
 
+      {/* Mobile Navigation Menu */}
+      <div 
+        className={`mobile-nav-overlay ${mobileNavOpen ? 'active' : ''}`} 
+        onClick={toggleMobileNav}
+      ></div>
+      
+      <div className={`mobile-nav ${mobileNavOpen ? 'active' : ''}`}>
+        <div className="mobile-nav-header">
+          <h3>Menu</h3>
+          <button className="mobile-nav-close" onClick={toggleMobileNav}>&times;</button>
+        </div>
+        
+        {/* Add credits display in mobile menu when user is logged in */}
+        {user && (
+          <div className="mobile-credits-display">
+            <UserCredits />
+          </div>
+        )}
+        
+        <div className="mobile-nav-links">
+          <Link to="/" className={`mobile-nav-link ${isActive('/') ? 'active' : ''}`} onClick={toggleMobileNav}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            Home
+          </Link>
+          
+          <Link to="/new-request" className={`mobile-nav-link ${isActive('/new-request') ? 'active' : ''}`} onClick={toggleMobileNav}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            New Request
+          </Link>
+          
+          <Link to="/top-up" className={`mobile-nav-link ${isActive('/top-up') ? 'active' : ''}`} onClick={toggleMobileNav}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23"></line>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            Top Up
+          </Link>
+          
+          <Link to="/contact" className={`mobile-nav-link ${isActive('/contact') ? 'active' : ''}`} onClick={toggleMobileNav}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+            </svg>
+            Contact
+          </Link>
+        </div>
+        
+        {/* Mobile user info and auth */}
+        {user ? (
+          <div className="mobile-user-info">
+            <div className="mobile-user-avatar">
+              {user.user_metadata?.avatar_url ? (
+                <img src={user.user_metadata.avatar_url} alt="User Avatar" className="user-avatar" />
+              ) : (
+                <div className="user-avatar-placeholder">
+                  {user.email ? user.email[0].toUpperCase() : 'U'}
+                </div>
+              )}
+            </div>
+            
+            <div className="mobile-user-details">
+              <div>{user.email}</div>
+              <button className="auth-button sign-out" onClick={handleSignOut}>Sign Out</button>
+            </div>
+          </div>
+        ) : (
+          <div className="mobile-auth-buttons">
+            <button 
+              className="auth-button google" 
+              onClick={(e) => {
+                e.preventDefault();
+                console.log("Mobile menu Google sign-in button clicked");
+                handleOAuthSignIn('google');
+                toggleMobileNav(); // Close the mobile menu after clicking
+              }}
+              disabled={authLoading === 'pending'}
+            >
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="google-logo" />
+              Sign In with Google
+            </button>
+          </div>
+        )}
+      </div>
+      
       <main className="content-container">
         {!user ? (
           <div className="welcome-section">

@@ -203,25 +203,31 @@ function TransactionsTable({ transactions = [], metaData = {} }) {
           </tr>
         </thead>
         <tbody>
-            {filteredAndSortedTransactions.length > 0 ? (
-              filteredAndSortedTransactions.map((tx, index) => (
-                <tr key={index}>
-                  <td>{formatDate(tx.date)}</td>
-                  <td className="description-cell">{tx.description}</td>
-                  <td className="amount-column">{formatCurrency(tx.amount, tx.deposit, symbol)}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="3" className="empty-table">
-                  {searchTerm ? 'No transactions match your search' : 'No transactions available'}
+          {filteredAndSortedTransactions.length > 0 ? (
+            filteredAndSortedTransactions.map((tx, index) => (
+              <tr key={index}>
+                <td data-label="Date">
+                  {formatDate(tx.date)}
+                </td>
+                <td className="description-cell" data-label="Description">
+                  {tx.description || 'No description'}
+                </td>
+                <td className="amount-column" data-label="Amount">
+                  {formatCurrency(tx.amount, tx.deposit, symbol)}
                 </td>
               </tr>
-            )}
+            ))
+          ) : (
+            <tr>
+              <td colSpan={3} className="empty-table">
+                No transactions found
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
-      </div>
     </div>
+  </div>
   );
 }
 

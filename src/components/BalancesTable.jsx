@@ -142,8 +142,8 @@ function BalancesTable({ balances = [], metaData = {} }) {
               {sortedBalances.length > 0 ? (
                 sortedBalances.map((balance, index) => (
               <tr key={index}>
-                <td>{formatDate(balance.date)}</td>
-                <td className="amount-column">{formatCurrency(balance.amount, symbol)}</td>
+                <td data-label="Date">{formatDate(balance.date)}</td>
+                <td className="amount-column" data-label="Balance">{formatCurrency(balance.amount, symbol)}</td>
               </tr>
                 ))
               ) : (

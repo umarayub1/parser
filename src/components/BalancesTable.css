@@ -158,10 +158,62 @@ tr:hover td {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
+    padding: 0.75rem 1rem;
   }
   
   .summary-item {
     width: 100%;
     margin-bottom: 0.5rem;
+  }
+  
+  th, td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.875rem;
+  }
+  
+  /* Create responsive table for very small screens */
+  @media (max-width: 480px) {
+    table {
+      display: block;
+      width: 100%;
+    }
+    
+    thead, tbody, th, td, tr {
+      display: block;
+    }
+    
+    thead tr {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+    }
+    
+    tr {
+      border-bottom: 1px solid var(--medium-gray);
+      margin-bottom: 0.5rem;
+    }
+    
+    td {
+      border: none;
+      border-bottom: 1px solid #eee;
+      position: relative;
+      padding-left: 50%;
+      text-align: right;
+    }
+    
+    td:before {
+      position: absolute;
+      top: 0.75rem;
+      left: 0.75rem;
+      width: 45%;
+      padding-right: 10px;
+      text-align: left;
+      font-weight: bold;
+      content: attr(data-label);
+    }
+    
+    .amount-column {
+      text-align: right;
+    }
   }
 } 
