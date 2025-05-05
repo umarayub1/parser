@@ -1025,6 +1025,7 @@ function App() {
         <div className="header-content">
           <div className="logo-container">
             <Link to="/" className="logo-link">
+              <img src="/logo.png" alt="Logo" className="header-logo" />
               <h1>Bank Parser</h1>
             </Link>
           </div>

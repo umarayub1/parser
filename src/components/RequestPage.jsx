@@ -407,13 +407,7 @@ function RequestPage() {
                   </div>
               </div>
           );
-      } else if (request.parsing_status === 'success' && parsedData) {
-          statusIndicator = (
-              <div className="success-message-container">
-                  <p className="success-message">✅ Parsing completed successfully!</p>
-              </div>
-          );
-      } else if (request.parsing_status === 'success' && !parsedData) {
+      }  else if (request.parsing_status === 'success' && !parsedData) {
           statusIndicator = <p className="error-message">Parsing reported success, but results could not be loaded.</p>;
       }
   }
@@ -429,25 +423,54 @@ function RequestPage() {
         <div className="results-section">
           <div className="results-header">
             <h2>{request?.file_name || (isLoading ? 'Loading...' : 'Statement')}</h2>
-            <div className="results-actions">
-              {request?.parsing_status === 'success' && parsedData && (
-                <DownloadDataButton 
-                  data={parsedData}
-                  filename={request?.file_name
-                    ? `parsed_${request.file_name.replace(/\.pdf$/i, '')}`
-                    : `parsed_data_${requestId}`}
-                  onError={setError}
-                />
-              )}
-            </div>
+          </div>
+
+          {/* Success messages with improved UI */}
+          <div className="messages-section">
+            {request?.parsing_status === 'success' && parsedData && (
+              <div className="success-message-container" style={{ 
+                padding: '12px 16px', 
+                borderRadius: '8px', 
+                backgroundColor: '#e7f7ee', 
+                marginBottom: '16px',
+                border: '1px solid #c3e6d1'
+              }}>
+                <p className="success-message" style={{ 
+                  margin: 0, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  fontWeight: '500'
+                }}>
+                  <span style={{ fontSize: '1.2em' }}></span> 
+                  Parsing completed successfully!
+                </p>
+              </div>
+            )}
+            
+            {parsedData?.meta_data?.['Ending Balance Offset'] === 0 && request?.parsing_status === 'success' && (
+              <div className="success-message-container accuracy-success" style={{ 
+                padding: '12px 16px', 
+                borderRadius: '8px', 
+                backgroundColor: '#edf6ff', 
+                marginBottom: '16px',
+                border: '1px solid #c9e0f7'
+              }}>
+                <p className="success-message" style={{ 
+                  margin: 0, 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: '500'
+                }}> 
+                  <span style={{ fontSize: '1.2em' }}>🎯</span>
+                  100% Parsing Accuracy - Parser achieved flawless accuracy (0 offset).
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="summary-section">
-              {parsedData?.meta_data?.['Ending Balance Offset'] === 0 && request?.parsing_status === 'success' && (
-                <div className="success-message-container accuracy-success">
-                    <p className="success-message"> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
-                </div>
-              )}
               {parsedData?.meta_data ? (
                 <StatementSummary metaData={parsedData.meta_data} />
               ) : (
@@ -455,6 +478,24 @@ function RequestPage() {
                 <SummaryPlaceholder />
               )}
           </div>
+
+          {/* Download button repositioned here - between summary and transactions */}
+          {request?.parsing_status === 'success' && parsedData && (
+            <div className="download-section" style={{ 
+              display: 'flex', 
+              justifyContent: 'flex-end',
+              marginBottom: '16px',
+              marginTop: '16px'
+            }}>
+              <DownloadDataButton 
+                data={parsedData}
+                filename={request?.file_name
+                  ? `parsed_${request.file_name.replace(/\.pdf$/i, '')}`
+                  : `parsed_data_${requestId}`}
+                onError={setError}
+              />
+            </div>
+          )}
 
           <div className="results-content">
             <div className="pdf-column">

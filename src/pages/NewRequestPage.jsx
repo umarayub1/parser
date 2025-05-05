@@ -549,6 +549,7 @@ function NewRequestPage() {
   const showNormalResults = !!(filePreviewUrl && parsedData);
   const previewUrlToShow = showTestDataResults ? testFilePreviewUrl : filePreviewUrl;
   const dataToShow = showTestDataResults ? testJsonData : parsedData;
+  const sourceFileName = showTestDataResults ? testPdfFileName : (file?.name || '');
   // const showPlaceholderPreview = !showNormalResults && filePreviewUrl && !showTestDataResults; // Placeholder logic might need review
   // const showTestPlaceholderPreview = !showTestDataResults && testFilePreviewUrl; // Placeholder logic might need review
 
@@ -676,35 +677,58 @@ function NewRequestPage() {
            {/* --- RESULTS SECTION --- */}
            {/* Show placeholder sections even before PDF upload */}
            <div className="results-section" style={{marginTop: '30px'}}>
-             {parsedData && !isLoading && !error && (
-                <div className="success-message-container"> 
-                  <p className="success-message" style={typographyStyles.text}>✅ Parsing completed successfully!</p> 
-                </div>
-             )}
              <div className="results-header">
                <h2 style={typographyStyles.heading}>Results {showTestDataResults ? '(Test Preview)' : (!previewUrlToShow && !dataToShow ? '(Preview)' : '')}</h2>
-               <div className="results-actions">
-                  {(showNormalResults || showTestDataResults) && (
-                    <DownloadDataButton 
-                      data={dataToShow}
-                      filename={sourceFileName ? 
-                        `parsed_${sourceFileName.replace(/\.pdf$/i, '')}` : 
-                        `parsed_data_${currentRequestId || 'test'}`}
-                      onError={setError}
-                      buttonStyle={{ fontSize: '1rem' }}
-                    />
-                  )}
-               </div>
+             </div>
+
+             {/* Success messages with improved UI */}
+             <div className="messages-section">
+               {parsedData && !isLoading && !error && (
+                 <div className="success-message-container" style={{ 
+                   padding: '12px 16px', 
+                   borderRadius: '8px', 
+                   backgroundColor: '#e7f7ee', 
+                   marginBottom: '16px',
+                   border: '1px solid #c3e6d1'
+                 }}> 
+                   <p className="success-message" style={{ 
+                     margin: 0, 
+                     display: 'flex', 
+                     alignItems: 'center', 
+                     gap: '8px',
+                     fontWeight: '500'
+                   }}>
+                     <span style={{ fontSize: '1.2em' }}></span> 
+                     Parsing completed successfully!
+                   </p> 
+                 </div>
+               )}
+               
+               {dataToShow?.meta_data?.['Ending Balance Offset'] === 0 && (
+                 <div className="success-message-container accuracy-success" style={{ 
+                   padding: '12px 16px', 
+                   borderRadius: '8px', 
+                   backgroundColor: '#edf6ff', 
+                   marginBottom: '16px',
+                   border: '1px solid #c9e0f7'
+                 }}>
+                   <p className="success-message" style={{ 
+                     margin: 0, 
+                     display: 'flex', 
+                     alignItems: 'center',
+                     gap: '8px',
+                     fontWeight: '500'
+                   }}> 
+                     <span style={{ fontSize: '1.2em' }}></span>
+                     100% Parsing Accuracy - Parser achieved flawless accuracy (0 offset).
+                   </p>
+                 </div>
+               )}
              </div>
 
              <div className="summary-section">
                {(showNormalResults || showTestDataResults) ? (
                  <>
-                   {dataToShow?.meta_data?.['Ending Balance Offset'] === 0 && (
-                     <div className="success-message-container accuracy-success">
-                        <p className="success-message" style={typographyStyles.text}> 🎯 100% Parsing Accuracy<br /> Parser achieved flawless accuracy (0 offset).</p>
-                     </div>
-                   )}
                    <StatementSummary metaData={dataToShow.meta_data} />
                  </>
                ) : ( 
@@ -712,6 +736,25 @@ function NewRequestPage() {
                  <SummaryPlaceholder />
                )}
              </div> {/* End summary-section */}
+
+             {/* Download button repositioned here - between summary and transactions */}
+             {(showNormalResults || showTestDataResults) && (
+               <div className="download-section" style={{ 
+                 display: 'flex', 
+                 justifyContent: 'flex-end',
+                 marginBottom: '16px',
+                 marginTop: '16px'
+               }}>
+                 <DownloadDataButton 
+                   data={dataToShow}
+                   filename={sourceFileName ? 
+                     `parsed_${sourceFileName.replace(/\.pdf$/i, '')}` : 
+                     `parsed_data_${currentRequestId || 'test'}`}
+                   onError={setError}
+                   buttonStyle={{ fontSize: '1rem' }}
+                 />
+               </div>
+             )}
 
              <div className="results-content">
                <div className="pdf-column">
@@ -745,4 +788,4 @@ function NewRequestPage() {
   );
 }
 
-export default NewRequestPage; 
+export default NewRequestPage;

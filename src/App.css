@@ -860,7 +860,7 @@ input[type="file"]:disabled + label {
   z-index: 100;
   width: 100%;
   padding: 0;
-  height: 60px;
+  height: 80px;
 }
 
 .header-content {
@@ -872,6 +872,13 @@ input[type="file"]:disabled + label {
   height: 100%;
 }
 
+.logo-container {
+  height: 80px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
 .logo-container h1 {
   margin: 0;
   font-size: 1.3rem; /* Smaller logo font */
@@ -881,6 +888,15 @@ input[type="file"]:disabled + label {
 
 .logo-link {
   text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+
+.header-logo {
+  height: 150px;
+  margin-right: 10px;
+  object-fit: contain;
+  padding: 2px 0;
 }
 
 .header-controls {
