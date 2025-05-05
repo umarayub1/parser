@@ -25,7 +25,8 @@ export const signInWithOAuthThunk = createAsyncThunk(
       console.log(`Starting OAuth sign-in with ${provider}...`);
       
       // Get current URL for redirect
-      const redirectUrl = window.location.origin;
+      // Use VITE_APP_BASE_URL environment variable instead of window.location.origin
+      const redirectUrl = import.meta.env.VITE_APP_BASE_URL || window.location.origin;
       console.log(`Setting redirect URL to: ${redirectUrl}`);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
