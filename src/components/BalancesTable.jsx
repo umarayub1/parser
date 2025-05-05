@@ -15,20 +15,26 @@ const formatDate = (isoString) => {
   }
 };
 
-const formatCurrency = (amount) => {
+const formatCurrency = (amount, symbol) => {
   if (amount === null || amount === undefined) return 'N/A';
   
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2
-  }).format(amount);
+  const numberFormat = new Intl.NumberFormat('en-US', {
+    style: 'decimal', // Use decimal instead of currency
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  
+  const formattedNumber = numberFormat.format(amount);
+  return symbol ? `${symbol}${formattedNumber}` : formattedNumber;
 };
 
-function BalancesTable({ balances = [] }) {
+function BalancesTable({ balances = [], metaData = {} }) {
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'original' });
   // Store original balances for reference
   const originalBalances = useMemo(() => balances, [balances]);
+  
+  // Extract currency symbol from metaData
+  const symbol = metaData?.Symbol || '';
   
   // Handle column sort
   const requestSort = (key) => {
@@ -97,19 +103,19 @@ function BalancesTable({ balances = [] }) {
         <div className="summary-item">
           <span className="summary-label">Lowest Balance</span>
           <span className="summary-value min-amount">
-            {formatCurrency(balanceStats.min)}
+            {formatCurrency(balanceStats.min, symbol)}
           </span>
         </div>
         <div className="summary-item">
           <span className="summary-label">Highest Balance</span>
           <span className="summary-value max-amount">
-            {formatCurrency(balanceStats.max)}
+            {formatCurrency(balanceStats.max, symbol)}
           </span>
         </div>
         <div className="summary-item">
           <span className="summary-label">Average Balance</span>
           <span className="summary-value avg-amount">
-            {formatCurrency(balanceStats.avg)}
+            {formatCurrency(balanceStats.avg, symbol)}
           </span>
         </div>
       </div>
@@ -137,7 +143,7 @@ function BalancesTable({ balances = [] }) {
                 sortedBalances.map((balance, index) => (
               <tr key={index}>
                 <td>{formatDate(balance.date)}</td>
-                <td className="amount-column">{formatCurrency(balance.amount)}</td>
+                <td className="amount-column">{formatCurrency(balance.amount, symbol)}</td>
               </tr>
                 ))
               ) : (

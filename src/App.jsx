@@ -7,6 +7,7 @@ import './App.css';
 import RequestsHistoryTable from './components/RequestsHistoryTable'; // <<< Import History Table
 import UserCredits from './components/UserCredits'; // Import UserCredits component
 import RequestPage from './components/RequestPage'; // Import RequestPage component
+import DownloadDataButton from './components/DownloadDataButton'; // Import our new component
 // Import Redux actions and selectors
 import {
   setSession,
@@ -24,6 +25,7 @@ import {
 import NewRequestPage from './pages/NewRequestPage';
 import CryptoTopUpPage from './pages/CryptoTopUpPage';
 import ProfilePage from './pages/ProfilePage';
+import ContactPage from './pages/ContactPage';
 
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
 
@@ -139,7 +141,7 @@ function App() {
       try {
         const { data, error } = await supabase
           .from('requests')
-          .select('id, created_at, file_name, page_count, parsing_status') // Select necessary columns
+          .select('id, created_at, file_name, page_count, parsing_status, parsed_data') // Added parsed_data to select
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }); // Show newest first
 
@@ -900,6 +902,8 @@ function App() {
    };
 
   // Function to handle JSON download (Updated to handle test data)
+  // This function has been replaced by the DownloadDataButton component
+  // and is maintained here only for backward compatibility or direct programmatic calls
   const handleDownloadJson = useCallback(() => {
     const dataToDownload = testJsonData || parsedData; // Prioritize test data if present
     const sourceFileName = testPdfFileName || file?.name; // Get name from test PDF or regular PDF
@@ -910,7 +914,15 @@ function App() {
     }
 
     try {
-      const jsonString = JSON.stringify(dataToDownload, null, 2);
+      // We'll use the DownloadDataButton component approach but call it programmatically
+      // Transform data to match the new schema requirements
+      const transformedData = {
+        meta_data: dataToDownload.meta_data || {},
+        balances: dataToDownload.balances || [],
+        transactions_data: dataToDownload.transactions_data || []
+      };
+      
+      const jsonString = JSON.stringify(transformedData, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -929,6 +941,15 @@ function App() {
       setError("Could not generate download link.");
     }
   }, [parsedData, testJsonData, file, testPdfFileName, currentRequestId]); // Added test data dependencies
+
+  // For any UI element requiring download functionality, replace with:
+  // <DownloadDataButton 
+  //   data={dataToShow}
+  //   filename={sourceFileName ? 
+  //     `parsed_${sourceFileName.replace(/\.pdf$/i, '')}` : 
+  //     `parsed_data_${currentRequestId || 'test'}`}
+  //   onError={setError}
+  // />
 
   // Determine if we are showing results from test data or normal flow
   const showTestDataResults = !!(testFilePreviewUrl && testJsonData);
@@ -991,6 +1012,9 @@ function App() {
     if (path === '/profile') {
       return location.pathname === '/profile';
     }
+    if (path === '/contact') {
+      return location.pathname === '/contact';
+    }
     return location.pathname.startsWith(path);
   };
 
@@ -1028,6 +1052,12 @@ function App() {
                     <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                   </svg>
                   <span className="nav-text">Top Up</span>
+                </Link>
+                <Link to="/contact" className={`nav-link ${isActive('/contact') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                  </svg>
+                  <span className="nav-text">Contact</span>
                 </Link>
               </div>
             )}
@@ -1171,6 +1201,7 @@ function App() {
             <Route path="/top-up" element={<CryptoTopUpPage />} />
             <Route path="/requests/:id" element={<RequestPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/contact" element={<ContactPage />} />
           </Routes>
         )}
       </main>

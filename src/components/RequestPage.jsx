@@ -7,6 +7,8 @@ import StatementSummary from './StatementSummary';
 import TransactionsTable from './TransactionsTable';
 import BalancesTable from './BalancesTable';
 import UserCredits from './UserCredits';
+import SummaryPlaceholder from './SummaryPlaceholder';
+import DownloadDataButton from './DownloadDataButton';
 import '../App.css';
 
 // Helper function to format time
@@ -347,29 +349,6 @@ function RequestPage() {
     };
   }, [request, now]);
 
-  const handleDownloadJson = useCallback(() => {
-    if (!parsedData) {
-      setError("No parsed data available to download.");
-      return;
-    }
-    try {
-      const jsonString = JSON.stringify(parsedData, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const filename = request?.file_name
-        ? `parsed_${request.file_name.replace(/\.pdf$/i, '')}.json`
-        : `parsed_data_${requestId}.json`;
-      link.download = filename;
-      document.body.appendChild(link); link.click(); document.body.removeChild(link);
-      URL.revokeObjectURL(url); setError('');
-    } catch (downloadError) {
-      console.error("Error creating download link:", downloadError);
-      setError("Could not generate download link.");
-    }
-  }, [parsedData, request, requestId]);
-
   let statusIndicator = null;
   if (isAuthLoading) {
     statusIndicator = (
@@ -452,9 +431,13 @@ function RequestPage() {
             <h2>{request?.file_name || (isLoading ? 'Loading...' : 'Statement')}</h2>
             <div className="results-actions">
               {request?.parsing_status === 'success' && parsedData && (
-                <button onClick={handleDownloadJson} className="cta-button download-button">
-                  Download JSON
-                </button>
+                <DownloadDataButton 
+                  data={parsedData}
+                  filename={request?.file_name
+                    ? `parsed_${request.file_name.replace(/\.pdf$/i, '')}`
+                    : `parsed_data_${requestId}`}
+                  onError={setError}
+                />
               )}
             </div>
           </div>
@@ -469,74 +452,7 @@ function RequestPage() {
                 <StatementSummary metaData={parsedData.meta_data} />
               ) : (
                 /* Show placeholder structure when data is not yet available */
-                <div className="summary-card"> {/* Mimic the StatementSummary structure */}
-                  <div className="summary-header">
-                    <h3>Account Summary</h3>
-                    <div className="skeleton-badge"></div>
-                  </div>
-                  <div className="summary-body">
-                    <div className="summary-columns">
-                      <div className="summary-column">
-                        <div className="summary-row">
-                          <div className="summary-label">Customer</div>
-                          <div className="summary-value"></div>
-                        </div>
-                        <div className="summary-row">
-                          <div className="summary-label">Account Number</div>
-                          <div className="summary-value account-number"></div>
-                        </div>
-                        <div className="summary-row">
-                          <div className="summary-label">Statement Period</div>
-                          <div className="summary-value"></div>
-                        </div>
-                      </div>
-                      
-                      <div className="summary-column">
-                        <div className="summary-row">
-                          <div className="summary-label">Starting Balance</div>
-                          <div className="summary-value"></div>
-                        </div>
-                        <div className="summary-row">
-                          <div className="summary-label">Ending Balance</div>
-                          <div className="summary-value fw-bold"></div>
-                        </div>
-                        <div className="summary-row balance-offset">
-                          <div className="summary-label">Balance Offset</div>
-                          <div className="summary-value text-muted"></div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="summary-divider"></div>
-                    
-                    <div className="transaction-overview">
-                      <div className="overview-header">
-                        <div className="total-transactions">
-                          <span className="transaction-count">0</span>
-                          <span className="transaction-label">Transactions</span>
-                        </div>
-                      </div>
-                      
-                      <div className="transaction-summary">
-                        <div className="transaction-type credits">
-                          <div className="transaction-amount">$0.00</div>
-                          <div className="transaction-details">
-                            <div className="transaction-label">Credits</div>
-                            <div className="transaction-count">0 transactions</div>
-                          </div>
-                        </div>
-                        
-                        <div className="transaction-type debits">
-                          <div className="transaction-amount">$0.00</div>
-                          <div className="transaction-details">
-                            <div className="transaction-label">Debits</div>
-                            <div className="transaction-count">0 transactions</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <SummaryPlaceholder />
               )}
           </div>
 
@@ -555,9 +471,17 @@ function RequestPage() {
             </div>
             <div className="right-column">
               <div className="transactions-column">
-                <TransactionsTable transactions={parsedData?.transactions_data || []} isLoading={isLoading || (request?.parsing_status === 'processing')} />
+                <TransactionsTable 
+                  transactions={parsedData?.transactions_data || []} 
+                  metaData={parsedData?.meta_data || {}}
+                  isLoading={isLoading || (request?.parsing_status === 'processing')} 
+                />
               </div>
-              <BalancesTable balances={parsedData?.balances || []} isLoading={isLoading || (request?.parsing_status === 'processing')} />
+              <BalancesTable 
+                balances={parsedData?.balances || []} 
+                metaData={parsedData?.meta_data || {}}
+                isLoading={isLoading || (request?.parsing_status === 'processing')} 
+              />
             </div>
           </div>
         </div>

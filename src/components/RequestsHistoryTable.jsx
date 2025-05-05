@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './RequestsHistoryTable.css'; // Import the CSS styles
 
@@ -81,6 +81,8 @@ const StatusBadge = ({ status }) => {
 
 function RequestsHistoryTable({ requests, isLoading }) {
   const navigate = useNavigate();
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 20;
 
   if (isLoading) {
     return <p>Loading history...</p>;
@@ -95,6 +97,24 @@ function RequestsHistoryTable({ requests, isLoading }) {
     navigate(`/requests/${requestId}`);
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(requests.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, requests.length);
+  const currentRequests = requests.slice(startIndex, endIndex);
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
   // Table styles
   const tableStyles = {
     container: {
@@ -104,61 +124,147 @@ function RequestsHistoryTable({ requests, isLoading }) {
       padding: '20px',
       marginBottom: '20px'
     },
+    tableWrapper: {
+      height: `${rowsPerPage * 53}px`, // Fixed height container
+      overflowY: 'hidden',
+      marginBottom: '16px'
+    },
     tableHeader: {
       fontWeight: '600',
       background: '#f5f7fa',
       color: '#4a5568',
       textAlign: 'left',
       padding: '12px 16px',
-      borderBottom: '2px solid #e2e8f0'
+      borderBottom: '2px solid #e2e8f0',
+      position: 'sticky',
+      top: 0,
+      zIndex: 10
     },
     table: { 
       width: '100%', 
       borderCollapse: 'collapse',
-      marginTop: '12px'
+      marginTop: '12px',
+      tableLayout: 'fixed' // Ensure columns maintain equal width
     },
     row: {
       cursor: 'pointer',
       borderBottom: '1px solid #edf2f7',
-      transition: 'background-color 0.2s'
+      transition: 'background-color 0.2s',
+      height: '53px' // Explicit row height
     },
     cell: {
       padding: '12px 16px',
-      fontSize: '0.95rem'
+      fontSize: '0.95rem',
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis'
+    },
+    col1: { width: '30%' }, // File name column
+    col2: { width: '20%' }, // Created At column
+    col3: { width: '10%' }, // Pages column
+    col4: { width: '20%' }, // Parsing Status column
+    col5: { width: '20%' }, // Balance Offset column
+    pagination: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '8px 0'
+    },
+    pageInfo: {
+      fontSize: '0.9rem',
+      color: '#4a5568'
+    },
+    pageButton: {
+      background: '#edf2f7',
+      border: 'none',
+      borderRadius: '4px',
+      padding: '8px 16px',
+      cursor: 'pointer',
+      color: '#4a5568',
+      fontWeight: '500',
+      margin: '0 4px',
+      transition: 'background-color 0.2s'
+    },
+    disabledButton: {
+      opacity: 0.5,
+      cursor: 'not-allowed'
     }
   };
 
   return (
     <div style={tableStyles.container} className="history-table-container">
       <h2>History</h2>
-      <table style={tableStyles.table}>
-        <thead>
-          <tr>
-            <th style={tableStyles.tableHeader}>File Name</th>
-            <th style={tableStyles.tableHeader}>Created At</th>
-            <th style={tableStyles.tableHeader}>Pages</th>
-            <th style={tableStyles.tableHeader}>Parsing Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {requests.map((req) => (
-            <tr
-              key={req.id}
-              onClick={() => handleRowClick(req.id)}
-              style={tableStyles.row}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
-            >
-              <td style={tableStyles.cell}>{req.file_name || 'N/A'}</td>
-              <td style={tableStyles.cell}>{formatDate(req.created_at)}</td>
-              <td style={tableStyles.cell}>{req.page_count ?? 'N/A'}</td>
-              <td style={tableStyles.cell}>
-                <StatusBadge status={req.parsing_status} />
-              </td>
+      <div style={tableStyles.tableWrapper}>
+        <table style={tableStyles.table}>
+          <colgroup>
+            <col style={tableStyles.col1} />
+            <col style={tableStyles.col2} />
+            <col style={tableStyles.col3} />
+            <col style={tableStyles.col4} />
+            <col style={tableStyles.col5} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th style={tableStyles.tableHeader}>File Name</th>
+              <th style={tableStyles.tableHeader}>Created At</th>
+              <th style={tableStyles.tableHeader}>Pages</th>
+              <th style={tableStyles.tableHeader}>Parsing Status</th>
+              <th style={tableStyles.tableHeader}>Balance Offset</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {currentRequests.map((req) => (
+              <tr
+                key={req.id}
+                onClick={() => handleRowClick(req.id)}
+                style={tableStyles.row}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
+              >
+                <td style={tableStyles.cell}>{req.file_name || 'N/A'}</td>
+                <td style={tableStyles.cell}>{formatDate(req.created_at)}</td>
+                <td style={tableStyles.cell}>{req.page_count ?? 'N/A'}</td>
+                <td style={tableStyles.cell}>
+                  <StatusBadge status={req.parsing_status} />
+                </td>
+                <td style={tableStyles.cell}>
+                  {req.parsed_data?.meta_data?.["Ending Balance Offset"]}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      
+      {totalPages > 1 && (
+        <div style={tableStyles.pagination}>
+          <div style={tableStyles.pageInfo}>
+            Showing {startIndex + 1}-{endIndex} of {requests.length} entries
+          </div>
+          <div>
+            <button 
+              onClick={goToPreviousPage} 
+              disabled={currentPage === 1}
+              style={{
+                ...tableStyles.pageButton,
+                ...(currentPage === 1 ? tableStyles.disabledButton : {})
+              }}
+            >
+              Previous
+            </button>
+            <button 
+              onClick={goToNextPage} 
+              disabled={currentPage === totalPages}
+              style={{
+                ...tableStyles.pageButton,
+                ...(currentPage === totalPages ? tableStyles.disabledButton : {})
+              }}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

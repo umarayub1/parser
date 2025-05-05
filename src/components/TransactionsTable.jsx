@@ -18,14 +18,17 @@ const formatDate = (isoString) => {
   }
 };
 
-const formatCurrency = (amount, isDeposit) => {
+const formatCurrency = (amount, isDeposit, symbol) => {
   if (amount === null || amount === undefined) return 'N/A';
   
-  const formattedAmount = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2
-  }).format(Math.abs(amount));
+  const numberFormat = new Intl.NumberFormat('en-US', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  
+  const formattedNumber = numberFormat.format(Math.abs(amount));
+  const formattedAmount = symbol ? `${symbol}${formattedNumber}` : formattedNumber;
   
   const className = isDeposit ? 'deposit-amount' : 'withdrawal-amount';
   const sign = isDeposit ? '+' : '';
@@ -33,15 +36,40 @@ const formatCurrency = (amount, isDeposit) => {
   return <span className={className}>{sign}{formattedAmount}</span>;
 };
 
-function TransactionsTable({ transactions = [] }) {
+const formatTotalAmount = (amount, symbol) => {
+  if (amount === null || amount === undefined) return 'N/A';
+  
+  const numberFormat = new Intl.NumberFormat('en-US', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  
+  const formattedNumber = numberFormat.format(amount);
+  return symbol ? `${symbol}${formattedNumber}` : formattedNumber;
+};
+
+function TransactionsTable({ transactions = [], metaData = {} }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'original' });
   // Store original transactions for reference
   const originalTransactions = useMemo(() => transactions, [transactions]);
   
+  // Extract currency symbol from metaData
+  const symbol = metaData?.Symbol || '';
+  
   // Handle search input change
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
+  };
+  
+  // Format total amounts with proper sign
+  const formatDepositsTotal = (amount, symbol) => {
+    return <span>{formatTotalAmount(amount, symbol)}</span>;
+  };
+  
+  const formatWithdrawalsTotal = (amount, symbol) => {
+    return <span>{formatTotalAmount(amount, symbol)}</span>;
   };
   
   // Handle column sort
@@ -139,19 +167,13 @@ function TransactionsTable({ transactions = [] }) {
         <div className="summary-item">
           <span className="summary-label">Total Deposits</span>
           <span className="summary-value deposit-amount">
-            {new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            }).format(totals.deposits)}
+            {formatDepositsTotal(totals.deposits, symbol)}
           </span>
         </div>
         <div className="summary-item">
           <span className="summary-label">Total Withdrawals</span>
           <span className="summary-value withdrawal-amount">
-            {new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: 'USD',
-            }).format(totals.withdrawals)}
+            {formatWithdrawalsTotal(totals.withdrawals, symbol)}
           </span>
         </div>
       </div>
@@ -186,7 +208,7 @@ function TransactionsTable({ transactions = [] }) {
                 <tr key={index}>
                   <td>{formatDate(tx.date)}</td>
                   <td className="description-cell">{tx.description}</td>
-                  <td className="amount-column">{formatCurrency(tx.amount, tx.deposit)}</td>
+                  <td className="amount-column">{formatCurrency(tx.amount, tx.deposit, symbol)}</td>
                 </tr>
               ))
             ) : (

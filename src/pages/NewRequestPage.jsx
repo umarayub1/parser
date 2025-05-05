@@ -9,6 +9,8 @@ import StatementSummary from '../components/StatementSummary';
 import TransactionsTable from '../components/TransactionsTable';
 import BalancesTable from '../components/BalancesTable';
 import UserCredits from '../components/UserCredits'; // Import UserCredits component
+import SummaryPlaceholder from '../components/SummaryPlaceholder';
+import DownloadDataButton from '../components/DownloadDataButton'; // Import our new component
 // import PdfPreview from '../components/PdfPreview'; // Using iframe directly for now
 
 // Import Redux selectors/actions if needed (currently only uses user)
@@ -495,22 +497,6 @@ function NewRequestPage() {
       reader.readAsText(selectedFile);
     }
   };
-  const handleDownloadJson = useCallback(() => {
-    const dataToDownload = testJsonData || parsedData;
-    const sourceFileName = testPdfFileName || file?.name;
-    if (!dataToDownload) { setError("No data available to download."); return; }
-    try {
-      const jsonString = JSON.stringify(dataToDownload, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const filename = sourceFileName ? `parsed_${sourceFileName.replace(/\.pdf$/i, '')}.json` : `parsed_data_${currentRequestId || 'test'}.json`;
-      link.download = filename;
-      document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url); setError('');
-    } catch (error) { setError("Could not generate download link."); }
-  }, [parsedData, testJsonData, file, testPdfFileName, currentRequestId]);
-
 
   // --- Reset Function (Modified slightly) ---
   const resetState = () => {
@@ -651,7 +637,7 @@ function NewRequestPage() {
                (() => {
                    // --- Start Replacement ---
                    // Use state variables: pageCount, createdAtTime, now
-                   const estimatedDurationMs = pageCount > 0 ? pageCount * 20 * 1000 : 3 * 60 * 1000; // 20s/page, fallback 3 min
+                   const estimatedDurationMs = pageCount > 0 ? pageCount * 40 * 1000 : 3 * 60 * 1000; // 20s/page, fallback 3 min
                    const currentCreatedAtTime = createdAtTime; // Use state variable
                    const elapsedTime = currentCreatedAtTime ? now - currentCreatedAtTime : 0; // Use state 'now' for current time
                    const remainingMs = Math.max(0, estimatedDurationMs - elapsedTime);
@@ -687,12 +673,6 @@ function NewRequestPage() {
                })()
            )}
 
-           {/* Message if parsing is complete or already in progress */}
-           {user && currentRequestId && (parsingStatus === 'processing' || parsingStatus === 'initiated') && 
-             <p style={typographyStyles.text}>Parsing is currently in progress...</p>}
-           {user && currentRequestId && parsingStatus === 'success' && 
-             <p style={typographyStyles.text}>Parsing complete. See results below.</p>}
-
            {/* --- RESULTS SECTION --- */}
            {/* Show placeholder sections even before PDF upload */}
            <div className="results-section" style={{marginTop: '30px'}}>
@@ -705,9 +685,14 @@ function NewRequestPage() {
                <h2 style={typographyStyles.heading}>Results {showTestDataResults ? '(Test Preview)' : (!previewUrlToShow && !dataToShow ? '(Preview)' : '')}</h2>
                <div className="results-actions">
                   {(showNormalResults || showTestDataResults) && (
-                    <button onClick={handleDownloadJson} className="cta-button download-button" style={{ fontSize: '1rem' }}> 
-                      Download JSON 
-                    </button>
+                    <DownloadDataButton 
+                      data={dataToShow}
+                      filename={sourceFileName ? 
+                        `parsed_${sourceFileName.replace(/\.pdf$/i, '')}` : 
+                        `parsed_data_${currentRequestId || 'test'}`}
+                      onError={setError}
+                      buttonStyle={{ fontSize: '1rem' }}
+                    />
                   )}
                </div>
              </div>
@@ -724,74 +709,7 @@ function NewRequestPage() {
                  </>
                ) : ( 
                  /* Show empty structure if no data yet, even before preview exists */
-                 <div className="summary-card" style={{ fontFamily: typographyStyles.fontFamily }}> {/* Mimic the StatementSummary structure */}
-                    <div className="summary-header">
-                      <h3 style={typographyStyles.subheading}>Account Summary</h3>
-                      <div className="skeleton-badge"></div>
-                    </div>
-                    <div className="summary-body">
-                      <div className="summary-columns">
-                        <div className="summary-column">
-                          <div className="summary-row">
-                            <div className="summary-label" style={typographyStyles.label}>Customer</div>
-                            <div className="summary-value" style={{...typographyStyles.text, fontWeight: 700}}></div>
-                          </div>
-                          <div className="summary-row">
-                            <div className="summary-label" style={typographyStyles.label}>Account Number</div>
-                            <div className="summary-value account-number" style={{...typographyStyles.text, fontWeight: 700}}></div>
-                          </div>
-                          <div className="summary-row">
-                            <div className="summary-label" style={typographyStyles.label}>Statement Period</div>
-                            <div className="summary-value" style={{...typographyStyles.text, fontWeight: 700}}></div>
-                          </div>
-                        </div>
-                        
-                        <div className="summary-column">
-                          <div className="summary-row">
-                            <div className="summary-label" style={typographyStyles.label}>Starting Balance</div>
-                            <div className="summary-value" style={{...typographyStyles.text, fontWeight: 700}}></div>
-                          </div>
-                          <div className="summary-row">
-                            <div className="summary-label" style={typographyStyles.label}>Ending Balance</div>
-                            <div className="summary-value fw-bold" style={{...typographyStyles.text, fontWeight: 700}}></div>
-                          </div>
-                          <div className="summary-row balance-offset">
-                            <div className="summary-label" style={typographyStyles.label}>Balance Offset</div>
-                            <div className="summary-value text-muted" style={{...typographyStyles.smallText, fontWeight: 700}}></div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="summary-divider"></div>
-                      
-                      <div className="transaction-overview">
-                        <div className="overview-header">
-                          <div className="total-transactions">
-                            <span className="transaction-count" style={{...typographyStyles.heading, fontWeight: 700}}>0</span>
-                            <span className="transaction-label" style={{...typographyStyles.smallText, fontWeight: 600}}>Transactions</span>
-                          </div>
-                        </div>
-                        
-                        <div className="transaction-summary">
-                          <div className="transaction-type credits">
-                            <div className="transaction-amount" style={{...typographyStyles.text, fontWeight: 700}}>$0.00</div>
-                            <div className="transaction-details">
-                              <div className="transaction-label" style={{...typographyStyles.label, fontWeight: 600}}>Credits</div>
-                              <div className="transaction-count" style={{...typographyStyles.smallText, fontWeight: 600}}>0 transactions</div>
-                            </div>
-                          </div>
-                          
-                          <div className="transaction-type debits">
-                            <div className="transaction-amount" style={{...typographyStyles.text, fontWeight: 700}}>$0.00</div>
-                            <div className="transaction-details">
-                              <div className="transaction-label" style={{...typographyStyles.label, fontWeight: 600}}>Debits</div>
-                              <div className="transaction-count" style={{...typographyStyles.smallText, fontWeight: 600}}>0 transactions</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                 </div>
+                 <SummaryPlaceholder />
                )}
              </div> {/* End summary-section */}
 
@@ -807,9 +725,15 @@ function NewRequestPage() {
                </div>
                <div className="right-column">
                  <div className="transactions-column">
-                   <TransactionsTable transactions={(showNormalResults || showTestDataResults) ? dataToShow.transactions_data : []} />
+                   <TransactionsTable 
+                     transactions={(showNormalResults || showTestDataResults) ? dataToShow.transactions_data : []}
+                     metaData={(showNormalResults || showTestDataResults) ? dataToShow.meta_data : {}} 
+                   />
                  </div>
-                 <BalancesTable balances={(showNormalResults || showTestDataResults) ? dataToShow.balances : []} />
+                 <BalancesTable 
+                   balances={(showNormalResults || showTestDataResults) ? dataToShow.balances : []}
+                   metaData={(showNormalResults || showTestDataResults) ? dataToShow.meta_data : {}} 
+                 />
                </div>
              </div> {/* End results-content */}
 

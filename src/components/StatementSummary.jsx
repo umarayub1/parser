@@ -1,5 +1,6 @@
 import React from 'react';
 import './StatementSummary.css'; // We will create this CSS file later
+import SummaryPlaceholder from './SummaryPlaceholder';
 
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
@@ -13,53 +14,23 @@ const formatDate = (dateString) => {
   }
 };
 
-const formatCurrency = (amount) => {
+const formatCurrency = (amount, symbol) => {
   if (amount === null || amount === undefined) return 'N/A';
-  return new Intl.NumberFormat('en-US', { 
-    style: 'currency', 
-    currency: 'USD',
-    minimumFractionDigits: 2
-  }).format(amount);
+  
+  const numberFormat = new Intl.NumberFormat('en-US', {
+    style: 'decimal',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  
+  const formattedNumber = numberFormat.format(amount);
+  return symbol ? `${symbol}${formattedNumber}` : formattedNumber;
 };
 
 function StatementSummary({ metaData }) {
   // If no metaData, render the placeholder structure with skeleton loading
   if (!metaData) {
-    return (
-      <div className="summary-card">
-        <div className="summary-header">
-          <h3>Account Summary</h3>
-          <div className="skeleton-badge"></div>
-        </div>
-        <div className="summary-body">
-          <div className="summary-row skeleton">
-            <div className="summary-label"></div>
-            <div className="summary-value"></div>
-          </div>
-          <div className="summary-row skeleton">
-            <div className="summary-label"></div>
-            <div className="summary-value"></div>
-          </div>
-          <div className="summary-row skeleton">
-            <div className="summary-label"></div>
-            <div className="summary-value"></div>
-          </div>
-          <div className="summary-row skeleton">
-            <div className="summary-label"></div>
-            <div className="summary-value"></div>
-          </div>
-          <div className="summary-divider"></div>
-          <div className="summary-row skeleton">
-            <div className="summary-label"></div>
-            <div className="summary-value"></div>
-          </div>
-          <div className="summary-row skeleton">
-            <div className="summary-label"></div>
-            <div className="summary-value"></div>
-          </div>
-        </div>
-      </div>
-    );
+    return <SummaryPlaceholder />;
   }
 
   const {
@@ -75,6 +46,9 @@ function StatementSummary({ metaData }) {
     'Account number': accountNumber,
     'Customer name': customerName,
     'Ending Balance Offset': balanceOffset,
+    'Phone number': phoneNumber,
+    'Currency': currency,
+    'Symbol': symbol,
   } = metaData;
 
   // Calculate statement period in days
@@ -95,7 +69,6 @@ function StatementSummary({ metaData }) {
     <div className="summary-card">
       <div className="summary-header">
         <h3>Account Summary</h3>
-        <div className="bank-badge">{bankName || 'Unknown Bank'}</div>
       </div>
       
       <div className="summary-body">
@@ -104,6 +77,14 @@ function StatementSummary({ metaData }) {
             <div className="summary-row">
               <div className="summary-label">Customer</div>
               <div className="summary-value">{customerName || 'N/A'}</div>
+            </div>
+            <div className="summary-row">
+              <div className="summary-label">Phone Number</div>
+              <div className="summary-value">{phoneNumber || 'N/A'}</div>
+            </div>
+            <div className="summary-row">
+              <div className="summary-label">Bank</div>
+              <div className="summary-value">{bankName || 'Unknown Bank'}</div>
             </div>
             <div className="summary-row">
               <div className="summary-label">Account Number</div>
@@ -120,11 +101,15 @@ function StatementSummary({ metaData }) {
           <div className="summary-column">
             <div className="summary-row">
               <div className="summary-label">Starting Balance</div>
-              <div className="summary-value">{formatCurrency(startBalance)}</div>
+              <div className="summary-value">{formatCurrency(startBalance, symbol)}</div>
             </div>
             <div className="summary-row">
               <div className="summary-label">Ending Balance</div>
-              <div className="summary-value fw-bold">{formatCurrency(endBalance)}</div>
+              <div className="summary-value fw-bold">{formatCurrency(endBalance, symbol)}</div>
+            </div>
+            <div className="summary-row">
+              <div className="summary-label">Currency</div>
+              <div className="summary-value">{currency || 'USD'} {symbol ? `(${symbol})` : ''}</div>
             </div>
             <div className="summary-row balance-offset">
               <div className="summary-label">Balance Offset</div>
@@ -146,7 +131,7 @@ function StatementSummary({ metaData }) {
           <div className="transaction-summary">
             <div className="transaction-type credits">
               <div className="transaction-amount">
-                {formatCurrency(creditAmount)}
+                {formatCurrency(creditAmount, symbol)}
               </div>
               <div className="transaction-details">
                 <div className="transaction-label">Credits</div>
@@ -156,7 +141,7 @@ function StatementSummary({ metaData }) {
             
             <div className="transaction-type debits">
               <div className="transaction-amount">
-                {formatCurrency(Math.abs(debitAmount))}
+                {formatCurrency(Math.abs(debitAmount), symbol)}
               </div>
               <div className="transaction-details">
                 <div className="transaction-label">Debits</div>
