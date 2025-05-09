@@ -2,7 +2,7 @@
 FROM node:20-alpine AS build
 
 # Set environment variables
-ENV NODE_ENV=production
+# ENV NODE_ENV=production # Commented out to ensure devDependencies are installed for the build
 ENV VITE_SUPABASE_URL=https://zxetedcvnlqapnpqnrid.supabase.co
 ENV VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4ZXRlZGN2bmxxYXBucHFucmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwNjkyNjcsImV4cCI6MjA1OTY0NTI2N30.E4BtILMqZYvOOl3X0qOEXIGbq_9JaJfJAAgssEsxu0o
 ENV VITE_APP_BASE_URL=https://parser-470443043814.asia-south2.run.app
@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 # Copy the rest of the application code
 COPY . .
