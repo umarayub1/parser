@@ -52,10 +52,6 @@ function ProfilePage() {
           <h3>Account Information</h3>
           <div className="profile-account-info">
             <div className="account-item">
-              <span className="account-label">Account ID:</span>
-              <span className="account-value">{user.id}</span>
-            </div>
-            <div className="account-item">
               <span className="account-label">Email verified:</span>
               <span className="account-value">
                 {user.email_confirmed_at ? (

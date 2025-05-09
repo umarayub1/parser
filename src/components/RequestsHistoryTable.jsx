@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient'; // Import supabase client
 import './RequestsHistoryTable.css'; // Import the CSS styles
 
 // Helper function to format date (optional)
@@ -79,10 +80,12 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-function RequestsHistoryTable({ requests, isLoading }) {
+function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 20;
+  const [deletingId, setDeletingId] = useState(null);
+  const [error, setError] = useState('');
 
   if (isLoading) {
     return <p className="history-loading">Loading history...</p>;
@@ -92,9 +95,49 @@ function RequestsHistoryTable({ requests, isLoading }) {
     return <p className="history-empty">No request history found.</p>;
   }
 
-  const handleRowClick = (requestId) => {
+  const handleRowClick = (requestId, e) => {
+    // If the click is on the delete button or its container, don't navigate
+    if (e.target.closest('.delete-button-container')) {
+      return;
+    }
     console.log("Navigating to request details:", requestId);
     navigate(`/requests/${requestId}`);
+  };
+
+  // Handle soft delete
+  const handleDelete = async (e, requestId) => {
+    e.stopPropagation(); // Prevent row click event
+    
+    if (window.confirm('Are you sure you want to delete this request? This action cannot be undone.')) {
+      try {
+        setDeletingId(requestId);
+        setError('');
+        
+        // Perform soft delete by updating is_deleted flag
+        const { error: deleteError } = await supabase
+          .from('requests')
+          .update({ is_deleted: true })
+          .eq('id', requestId);
+          
+        if (deleteError) throw deleteError;
+        
+        // If onRequestUpdate callback exists, call it to refresh the list
+        if (typeof onRequestUpdate === 'function') {
+          onRequestUpdate();
+        } else {
+          // Otherwise, filter out the deleted request locally
+          const updatedRequests = requests.filter(req => req.id !== requestId);
+          // The component will re-render with filtered requests
+        }
+        
+        console.log(`Request ${requestId} soft-deleted successfully`);
+      } catch (err) {
+        console.error(`Error soft-deleting request ${requestId}:`, err);
+        setError(`Failed to delete: ${err.message}`);
+      } finally {
+        setDeletingId(null);
+      }
+    }
   };
 
   // Pagination logic
@@ -115,9 +158,28 @@ function RequestsHistoryTable({ requests, isLoading }) {
     }
   };
 
+  // Delete button with trash icon
+  const DeleteButton = ({ requestId }) => (
+    <button 
+      className={`delete-button ${deletingId === requestId ? 'deleting' : ''}`}
+      onClick={(e) => handleDelete(e, requestId)}
+      disabled={deletingId === requestId}
+      title="Delete request"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+      </svg>
+      {deletingId === requestId && <span className="delete-spinner"></span>}
+    </button>
+  );
+
   return (
     <div className="history-table-container">
       <h2>History</h2>
+      {error && <div className="history-error">{error}</div>}
       <div className="history-table-wrapper">
         <table className="history-table">
           <thead className="history-table-head">
@@ -127,13 +189,14 @@ function RequestsHistoryTable({ requests, isLoading }) {
               <th className="history-table-header pages-column">Pages</th>
               <th className="history-table-header status-column">Parsing Status</th>
               <th className="history-table-header offset-column">Balance Offset</th>
+              <th className="history-table-header actions-column">Actions</th>
             </tr>
           </thead>
           <tbody>
             {currentRequests.map((req) => (
               <tr
                 key={req.id}
-                onClick={() => handleRowClick(req.id)}
+                onClick={(e) => handleRowClick(req.id, e)}
                 className="history-table-row"
               >
                 <td className="history-table-cell" data-label="File Name">{req.file_name || 'N/A'}</td>
@@ -144,6 +207,11 @@ function RequestsHistoryTable({ requests, isLoading }) {
                 </td>
                 <td className="history-table-cell offset-column" data-label="Balance Offset">
                   {req.parsed_data?.meta_data?.["Ending Balance Offset"]}
+                </td>
+                <td className="history-table-cell actions-column" data-label="Actions">
+                  <div className="delete-button-container">
+                    <DeleteButton requestId={req.id} />
+                  </div>
                 </td>
               </tr>
             ))}

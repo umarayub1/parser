@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - VITE_SUPABASE_URL=https://zxetedcvnlqapnpqnrid.supabase.co
+      - VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4ZXRlZGN2bmxxYXBucHFucmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwNjkyNjcsImV4cCI6MjA1OTY0NTI2N30.E4BtILMqZYvOOl3X0qOEXIGbq_9JaJfJAAgssEsxu0o
+      - VITE_APP_BASE_URL=http://localhost:8080
+      - VITE_API_BASE_URL=http://localhost:4000/api
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - SUPABASE_URL=https://zxetedcvnlqapnpqnrid.supabase.co
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - PARSING_API_KEY=${PARSING_API_KEY}
+      - PARSING_API_URL=${PARSING_API_URL}
+      - PARSING_CALLBACK_SECRET=${PARSING_CALLBACK_SECRET}
+      - PARSING_CALLBACK_HANDLER_URL=${PARSING_CALLBACK_HANDLER_URL}
+    volumes:
+      - backend-uploads:/app/uploads
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  backend-uploads: 

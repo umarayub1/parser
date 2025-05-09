@@ -120,6 +120,73 @@
   font-style: italic;
 }
 
+/* Error message styling */
+.history-error {
+  background-color: rgba(239, 71, 111, 0.15);
+  color: var(--danger-color, #ef476f);
+  border: 1px solid rgba(239, 71, 111, 0.3);
+  padding: 10px 15px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+/* Delete button styles */
+.actions-column {
+  width: 70px;
+  text-align: center;
+}
+
+.delete-button-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.delete-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  color: #a0aec0;
+  position: relative;
+}
+
+.delete-button:hover {
+  background-color: rgba(239, 71, 111, 0.1);
+  color: var(--danger-color, #ef476f);
+}
+
+.delete-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-button.deleting {
+  color: var(--danger-color, #ef476f);
+}
+
+/* Delete spinner animation */
+.delete-spinner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(239, 71, 111, 0.3);
+  border-top: 2px solid var(--danger-color, #ef476f);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 /* Status Badge Styles */
 .status-badge {
   display: inline-flex;
@@ -188,14 +255,14 @@
     padding: 15px;
   }
   
-  .history-pagination {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
   .pagination-controls {
     width: 100%;
     justify-content: space-between;
+  }
+  
+  .history-pagination {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
@@ -245,12 +312,17 @@
   }
   
   /* Adjust specific columns for mobile display */
-  .pages-column, .status-column, .offset-column {
+  .pages-column, .status-column, .offset-column, .actions-column {
     text-align: right;
   }
   
   /* Make badges responsive */
   .status-badge {
+    margin-left: auto;
+  }
+  
+  /* Adjust action buttons on mobile */
+  .delete-button-container {
     margin-left: auto;
   }
 } 

@@ -858,19 +858,21 @@ input[type="file"]:disabled + label {
    ========================= */
 
 .app-header {
-  background-color: var(--white);
-  box-shadow: var(--shadow-md);
+  background-color: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
   position: sticky;
   top: 0;
   z-index: 100;
   width: 100%;
   padding: 0;
-  height: 80px;
+  height: 70px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .header-content {
-  width: 100%;
-  padding: 0 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -878,7 +880,7 @@ input[type="file"]:disabled + label {
 }
 
 .logo-container {
-  height: 80px;
+  height: 70px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -886,20 +888,26 @@ input[type="file"]:disabled + label {
 
 .logo-container h1 {
   margin: 0;
-  font-size: 1.3rem; /* Smaller logo font */
+  font-size: 1.3rem;
   font-weight: 700;
-  color: var(--primary-color);
+  color: #3b82f6;
+  letter-spacing: -0.5px;
 }
 
 .logo-link {
   text-decoration: none;
   display: flex;
   align-items: center;
+  transition: opacity 0.2s ease;
+}
+
+.logo-link:hover {
+  opacity: 0.9;
 }
 
 .header-logo {
-  height: 150px;
-  margin-right: 10px;
+  height: 140px;
+  margin-right: 8px;
   object-fit: contain;
   padding: 2px 0;
 }
@@ -913,7 +921,7 @@ input[type="file"]:disabled + label {
 
 .nav-links {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
   height: 100%;
   align-items: center;
 }
@@ -922,27 +930,27 @@ input[type="file"]:disabled + label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.3rem 0.8rem;
-  border-radius: 0.5rem;
-  color: var(--dark-gray);
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  color: #4b5563;
   font-weight: 500;
   text-decoration: none;
-  transition: var(--transition);
+  transition: all 0.2s ease;
   height: 36px;
 }
 
 .nav-link:hover {
-  background-color: rgba(67, 97, 238, 0.1);
-  color: var(--primary-color);
+  background-color: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
 }
 
 .nav-link.active {
-  background-color: var(--primary-color);
-  color: var(--white);
+  background-color: #3b82f6;
+  color: white;
 }
 
 .nav-link svg {
-  transition: var(--transition);
+  transition: transform 0.2s ease;
 }
 
 .nav-link:hover svg {
@@ -952,6 +960,7 @@ input[type="file"]:disabled + label {
 .auth-section {
   display: flex;
   align-items: center;
+  height: 100%;
 }
 
 .user-info {
@@ -2195,4 +2204,50 @@ html.menu-open,
 body.menu-open {
   overflow-x: hidden;
   position: relative;
+}
+
+/* Login button in header - improved version */
+.auth-button.login {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 18px;
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.auth-button.login:hover {
+  background-color: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.auth-buttons {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+/* Mobile auth button styles */
+.mobile-auth-buttons .auth-button.login {
+  width: 100%;
+  text-align: center;
+  background-color: #3b82f6;
+  color: white;
+  margin-top: 0;
+  border: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .auth-buttons {
+    display: none; /* Hide desktop auth buttons on mobile */
+  }
 }

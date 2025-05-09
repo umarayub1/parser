@@ -1,164 +1,283 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { supabase } from '../supabaseClient'; // Adjust path as necessary
+import ApiClient from '../components/ApiClient';
+import { supabase } from '../supabaseClient';
 
-// Async Thunk for fetching the initial session
-export const getSessionThunk = createAsyncThunk(
-  'auth/getSession',
-  async (_, { rejectWithValue }) => {
+// Initial state
+const initialState = {
+  user: null,
+  session: null,
+  loading: false,
+  error: null,
+  credits: 0,
+  authLoading: null // 'pending', 'fulfilled', 'rejected'
+};
+
+// Async thunks
+export const login = createAsyncThunk(
+  'auth/login',
+  async ({ email, password }, { rejectWithValue }) => {
     try {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      console.log("Redux: Initial session fetched:", data.session);
-      return data.session;
+      const data = await ApiClient.login(email, password);
+      return data;
     } catch (error) {
-      console.error("Redux: Error getting session:", error);
       return rejectWithValue(error.message);
     }
   }
 );
 
-// Async Thunk for OAuth Sign In
+export const signup = createAsyncThunk(
+  'auth/signup',
+  async ({ email, password, fullName }, { rejectWithValue }) => {
+    try {
+      const data = await ApiClient.signup(email, password, fullName);
+      return data;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const logout = createAsyncThunk(
+  'auth/logout',
+  async (_, { rejectWithValue }) => {
+    try {
+      await ApiClient.logout();
+      return null;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const fetchUser = createAsyncThunk(
+  'auth/fetchUser',
+  async (_, { rejectWithValue }) => {
+    try {
+      const user = await ApiClient.getCurrentUser();
+      return user;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const fetchCredits = createAsyncThunk(
+  'auth/fetchCredits',
+  async (_, { rejectWithValue }) => {
+    try {
+      const credits = await ApiClient.getCredits();
+      return credits;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+// New thunks for session management
+export const getSessionThunk = createAsyncThunk(
+  'auth/getSession',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      
+      dispatch(setSession(session));
+      
+      if (session?.user) {
+        dispatch(setUser(session.user));
+      }
+      
+      return session;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 export const signInWithOAuthThunk = createAsyncThunk(
   'auth/signInWithOAuth',
   async ({ provider }, { rejectWithValue }) => {
     try {
-      console.log(`Starting OAuth sign-in with ${provider}...`);
-      
-      // Get current URL for redirect
-      // Use VITE_APP_BASE_URL environment variable instead of window.location.origin
-      const redirectUrl = import.meta.env.VITE_APP_BASE_URL || window.location.origin;
-      console.log(`Setting redirect URL to: ${redirectUrl}`);
-      
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: provider,
+        provider,
         options: {
-          redirectTo: redirectUrl,
-        },
+          redirectTo: window.location.origin
+        }
       });
       
-      if (error) {
-        console.error(`OAuth sign-in error:`, error);
-        throw error;
-      }
-      
-      console.log(`OAuth sign-in initiated:`, data);
-      
-      // If we get here, the user will be redirected to the OAuth provider
-      return null;
+      if (error) throw error;
+      return data;
     } catch (error) {
-      console.error(`Redux: OAuth sign-in error (${provider}):`, error);
       return rejectWithValue(error.message);
     }
   }
 );
 
-// Async Thunk for Sign Out
 export const signOutThunk = createAsyncThunk(
   'auth/signOut',
-  async (_, { rejectWithValue }) => {
+  async (_, { dispatch, rejectWithValue }) => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      console.log("Redux: Signed out successfully.");
-      return null; // Indicates success
+      
+      dispatch(setSession(null));
+      dispatch(setUser(null));
+      
+      return null;
     } catch (error) {
-      console.error("Redux: Sign out error:", error);
       return rejectWithValue(error.message);
     }
   }
 );
 
-const initialState = {
-  session: null,
-  user: null, // Derived from session
-  loading: 'idle', // 'idle' | 'pending' | 'succeeded' | 'failed'
-  error: null,
-};
-
+// Auth slice
 const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
-    // Action to directly set the session, useful for the onAuthStateChange listener
+    setUser: (state, action) => {
+      state.user = action.payload;
+    },
     setSession: (state, action) => {
       state.session = action.payload;
-      state.user = action.payload?.user ?? null;
-      state.error = null; // Clear error on successful session update
-      state.loading = 'succeeded'; // Assume succeeded if listener provides session
-      console.log("Redux: Session set via listener:", action.payload);
+      // If session is null, also clear user
+      if (!action.payload) {
+        state.user = null;
+      }
     },
-    // Action to clear session state, e.g., after sign out confirmed by listener
-    clearSession: (state) => {
-      state.session = null;
-      state.user = null;
-      state.loading = 'idle';
-      state.error = null;
-      console.log("Redux: Session cleared.");
-    },
-    // Optional: Reducer to clear auth error manually if needed
-    clearAuthError: (state) => {
+    clearError: (state) => {
       state.error = null;
     }
   },
   extraReducers: (builder) => {
     builder
-      // getSessionThunk
-      .addCase(getSessionThunk.pending, (state) => {
-        state.loading = 'pending';
+      // Login
+      .addCase(login.pending, (state) => {
+        state.loading = true;
         state.error = null;
       })
-      .addCase(getSessionThunk.fulfilled, (state, action) => {
-        state.session = action.payload;
-        state.user = action.payload?.user ?? null;
-        state.loading = 'succeeded';
+      .addCase(login.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload.user;
+        state.session = action.payload.session;
+      })
+      .addCase(login.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      
+      // Signup
+      .addCase(signup.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(signup.fulfilled, (state) => {
+        state.loading = false;
+        // Note: We don't set user here because the user needs to verify email
+      })
+      .addCase(signup.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      
+      // Logout
+      .addCase(logout.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(logout.fulfilled, (state) => {
+        state.loading = false;
+        state.user = null;
+        state.session = null;
+        state.credits = 0;
+      })
+      .addCase(logout.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+        // Still reset user state even if logout failed on server
+        state.user = null;
+        state.session = null;
+        state.credits = 0;
+      })
+      
+      // Fetch User
+      .addCase(fetchUser.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchUser.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
+        if (action.payload?.credits_remaining) {
+          state.credits = action.payload.credits_remaining;
+        }
+      })
+      .addCase(fetchUser.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      
+      // Fetch Credits
+      .addCase(fetchCredits.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchCredits.fulfilled, (state, action) => {
+        state.loading = false;
+        state.credits = action.payload;
+      })
+      .addCase(fetchCredits.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      
+      // Get Session
+      .addCase(getSessionThunk.pending, (state) => {
+        state.authLoading = 'pending';
+      })
+      .addCase(getSessionThunk.fulfilled, (state) => {
+        state.authLoading = 'fulfilled';
       })
       .addCase(getSessionThunk.rejected, (state, action) => {
-        state.loading = 'failed';
-        state.error = action.payload; // Error message from rejectWithValue
-        state.session = null;
-        state.user = null;
+        state.authLoading = 'rejected';
+        state.error = action.payload;
       })
-      // signInWithOAuthThunk
+      
+      // Sign In with OAuth
       .addCase(signInWithOAuthThunk.pending, (state) => {
-        state.loading = 'pending';
-        state.error = null;
+        state.authLoading = 'pending';
       })
       .addCase(signInWithOAuthThunk.fulfilled, (state) => {
-        // State might not change immediately here as redirect is happening
-        // The onAuthStateChange listener will likely update the state after redirect
-        state.loading = 'succeeded'; // Or keep 'pending' until listener confirms? 'succeeded' seems ok.
+        state.authLoading = 'fulfilled';
       })
       .addCase(signInWithOAuthThunk.rejected, (state, action) => {
-        state.loading = 'failed';
+        state.authLoading = 'rejected';
         state.error = action.payload;
       })
-      // signOutThunk
+      
+      // Sign Out
       .addCase(signOutThunk.pending, (state) => {
-        state.loading = 'pending';
-        state.error = null;
+        state.authLoading = 'pending';
       })
       .addCase(signOutThunk.fulfilled, (state) => {
-        // The listener (onAuthStateChange) should trigger setSession(null)
-        // So we might not need to clear state here, but doing so is safe.
-        state.session = null;
-        state.user = null;
-        state.loading = 'succeeded'; // Or 'idle'? 'succeeded' indicates the sign out *action* finished.
+        state.authLoading = 'fulfilled';
       })
       .addCase(signOutThunk.rejected, (state, action) => {
-        state.loading = 'failed';
+        state.authLoading = 'rejected';
         state.error = action.payload;
       });
-  },
+  }
 });
 
-// Export actions
-export const { setSession, clearSession, clearAuthError } = authSlice.actions;
+// Actions
+export const { setUser, setSession, clearError } = authSlice.actions;
 
-// Export reducer
-export default authSlice.reducer;
-
-// Export selectors (optional but good practice)
-export const selectSession = (state) => state.auth.session;
+// Selectors
 export const selectUser = (state) => state.auth.user;
-export const selectAuthLoading = (state) => state.auth.loading;
-export const selectAuthError = (state) => state.auth.error; 
+export const selectSession = (state) => state.auth.session;
+export const selectAuthLoading = (state) => state.auth.authLoading;
+export const selectAuthError = (state) => state.auth.error;
+export const selectCredits = (state) => state.auth.credits;
+export const selectIsAuthenticated = (state) => !!state.auth.user;
+
+// Reducer
+export default authSlice.reducer; 

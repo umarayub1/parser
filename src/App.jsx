@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux'; // Import Redux hooks
 import { supabase } from './supabaseClient';
-import { Link, useNavigate, useLocation, Routes, Route } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import RequestsHistoryTable from './components/RequestsHistoryTable'; // <<< Import History Table
 import UserCredits from './components/UserCredits'; // Import UserCredits component
@@ -26,6 +26,11 @@ import NewRequestPage from './pages/NewRequestPage';
 import CryptoTopUpPage from './pages/CryptoTopUpPage';
 import ProfilePage from './pages/ProfilePage';
 import ContactPage from './pages/ContactPage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import ApiDocsPage from './pages/ApiDocsPage'; // Add import for API Docs page
+import ApiExamplesPage from './pages/ApiExamplesPage'; // Add import for API Examples page
+import LandingPage from './pages/LandingPage'; // Import the new LandingPage component
 
 const isDevelopment = import.meta.env.VITE_APP_MODE === 'development';
 
@@ -128,43 +133,39 @@ function App() {
   }, [authError]);
 
   // --- Fetch Request History when user logs in ---
-  useEffect(() => {
-    const fetchHistory = async () => {
-      if (!user?.id) {
-        setRequestsHistory([]); // Clear history if user logs out
-        return;
-      }
+  const fetchHistory = useCallback(async () => {
+    if (!user?.id) {
+      setRequestsHistory([]); // Clear history if user logs out
+      return;
+    }
 
-      console.log("Fetching request history for user:", user.id);
-      setHistoryLoading(true);
-      setHistoryError(''); // Clear previous errors
-      try {
-        const { data, error } = await supabase
-          .from('requests')
-          .select('id, created_at, file_name, page_count, parsing_status, parsed_data') // Added parsed_data to select
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }); // Show newest first
+    console.log("Fetching request history for user:", user.id);
+    setHistoryLoading(true);
+    setHistoryError(''); // Clear previous errors
+    try {
+      const { data, error } = await supabase
+        .from('requests')
+        .select('id, created_at, file_name, page_count, parsing_status, parsed_data') // Added parsed_data to select
+        .eq('user_id', user.id)
+        .eq('is_deleted', false) // Exclude soft-deleted records
+        .order('created_at', { ascending: false }); // Show newest first
 
-        if (error) throw error;
+      if (error) throw error;
 
-        console.log("Fetched history:", data);
-        setRequestsHistory(data || []);
-      } catch (err) {
-        console.error("Error fetching request history:", err);
-        setHistoryError(`Failed to load history: ${err.message}`);
-        setRequestsHistory([]); // Clear history on error
-      } finally {
-        setHistoryLoading(false);
-      }
-    };
-
-    fetchHistory();
-
-    // Optional: Set up a realtime subscription to the requests table for the user?
-    // This could update the table automatically when a request's status changes.
-    // Consider performance implications if the user has many requests.
-
+      console.log("Fetched history:", data);
+      setRequestsHistory(data || []);
+    } catch (err) {
+      console.error("Error fetching request history:", err);
+      setHistoryError(`Failed to load history: ${err.message}`);
+      setRequestsHistory([]); // Clear history on error
+    } finally {
+      setHistoryLoading(false);
+    }
   }, [user]); // Re-fetch when user object changes (login/logout)
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]); // Use the callback in the dependency array
 
   // --- Configuration Check & Unmount Cleanup ---
   useEffect(() => {
@@ -1006,6 +1007,9 @@ function App() {
     if (path === '/new-request') {
       return location.pathname === '/new-request';
     }
+    if (path === '/history') {
+      return location.pathname === '/history';
+    }
     if (path === '/top-up') {
       return location.pathname === '/top-up';
     }
@@ -1014,6 +1018,15 @@ function App() {
     }
     if (path === '/contact') {
       return location.pathname === '/contact';
+    }
+    if (path === '/login') {
+      return location.pathname === '/login';
+    }
+    if (path === '/signup') {
+      return location.pathname === '/signup';
+    }
+    if (path === '/api-docs') {
+      return location.pathname === '/api-docs';
     }
     return location.pathname.startsWith(path);
   };
@@ -1044,6 +1057,19 @@ function App() {
     document.documentElement.classList.remove('menu-open');
   }, [location.pathname]);
 
+  // Create PrivateRoute component for protected routes
+  const PrivateRoute = ({ children }) => {
+    const session = useSelector(selectSession);
+    const location = useLocation();
+    
+    if (!session) {
+      // Redirect to login if not authenticated, saving the intended destination
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+    
+    return children;
+  };
+
   // --- Render Logic (Dashboard View) ---
   return (
     <div className="main-layout">
@@ -1057,35 +1083,46 @@ function App() {
           </div>
           
           <div className="header-controls">
-            <div className="nav-links">
-              <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                </svg>
-                <span className="nav-text">Home</span>
-              </Link>
-              <Link to="/new-request" className={`nav-link ${isActive('/new-request') ? 'active' : ''}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                <span className="nav-text">New Request</span>
-              </Link>
-              <Link to="/top-up" className={`nav-link ${isActive('/top-up') ? 'active' : ''}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="1" x2="12" y2="23"></line>
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                </svg>
-                <span className="nav-text">Top Up</span>
-              </Link>
-              <Link to="/contact" className={`nav-link ${isActive('/contact') ? 'active' : ''}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                </svg>
-                <span className="nav-text">Contact</span>
-              </Link>
-            </div>
+            {user && (
+              <div className="nav-links">
+                <Link to="/new-request" className={`nav-link ${isActive('/new-request') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span className="nav-text">New Request</span>
+                </Link>
+                <Link to="/history" className={`nav-link ${isActive('/history') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                  <span className="nav-text">History</span>
+                </Link>
+                <Link to="/top-up" className={`nav-link ${isActive('/top-up') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  </svg>
+                  <span className="nav-text">Top Up</span>
+                </Link>
+                <Link to="/api-docs" className={`nav-link ${isActive('/api-docs') || isActive('/api-examples') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                    <polyline points="13 2 13 9 20 9"></polyline>
+                  </svg>
+                  <span className="nav-text">API</span>
+                </Link>
+                <Link to="/contact" className={`nav-link ${isActive('/contact') ? 'active' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                  </svg>
+                  <span className="nav-text">Contact</span>
+                </Link>
+              </div>
+            )}
             
             {/* Add hamburger menu for mobile */}
             <div 
@@ -1171,18 +1208,9 @@ function App() {
                 </div>
               ) : (
                 <div className="auth-buttons">
-                  <button 
-                    className="auth-button google" 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log("Welcome page Google sign-in button clicked directly");
-                      handleOAuthSignIn('google');
-                    }}
-                    disabled={authLoading === 'pending'}
-                  >
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="google-logo" />
-                    Sign in with Google
-                  </button>
+                  <Link to="/login" className="auth-button login">
+                    Log In
+                  </Link>
                 </div>
               )}
             </div>
@@ -1210,14 +1238,6 @@ function App() {
         )}
         
         <div className="mobile-nav-links">
-          <Link to="/" className={`mobile-nav-link ${isActive('/') ? 'active' : ''}`} onClick={toggleMobileNav}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
-            Home
-          </Link>
-          
           <Link to="/new-request" className={`mobile-nav-link ${isActive('/new-request') ? 'active' : ''}`} onClick={toggleMobileNav}>
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1226,12 +1246,30 @@ function App() {
             New Request
           </Link>
           
+          <Link to="/history" className={`mobile-nav-link ${isActive('/history') ? 'active' : ''}`} onClick={toggleMobileNav}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            History
+          </Link>
+          
           <Link to="/top-up" className={`mobile-nav-link ${isActive('/top-up') ? 'active' : ''}`} onClick={toggleMobileNav}>
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="1" x2="12" y2="23"></line>
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
             </svg>
             Top Up
+          </Link>
+          
+          <Link to="/api-docs" className={`mobile-nav-link ${isActive('/api-docs') ? 'active' : ''}`} onClick={toggleMobileNav}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+              <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
+            API
           </Link>
           
           <Link to="/contact" className={`mobile-nav-link ${isActive('/contact') ? 'active' : ''}`} onClick={toggleMobileNav}>
@@ -1262,60 +1300,41 @@ function App() {
           </div>
         ) : (
           <div className="mobile-auth-buttons">
-            <button 
-              className="auth-button google" 
-              onClick={(e) => {
-                e.preventDefault();
-                console.log("Mobile menu Google sign-in button clicked");
-                handleOAuthSignIn('google');
-                toggleMobileNav(); // Close the mobile menu after clicking
-              }}
-              disabled={authLoading === 'pending'}
+            <Link 
+              to="/login" 
+              className="auth-button login" 
+              onClick={toggleMobileNav}
             >
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="google-logo" />
-              Sign In with Google
-            </button>
+              Log In
+            </Link>
           </div>
         )}
       </div>
       
       <main className="content-container">
         {!user ? (
-          <div className="welcome-section">
-            <div className="welcome-content">
-              <h2>Welcome to Bank Statement Parser</h2>
-              <p>Sign in to process your bank statements and extract valuable data.</p>
-            </div>
-            <div className="welcome-features">
-              <div className="feature-card">
-                <div className="feature-icon">📊</div>
-                <h3>Transaction Analysis</h3>
-                <p>Extract and categorize all transactions from your bank statements automatically.</p>
-              </div>
-              <div className="feature-card">
-                <div className="feature-icon">🔒</div>
-                <h3>Secure Processing</h3>
-                <p>Your data is processed securely and not stored longer than necessary.</p>
-              </div>
-              <div className="feature-card">
-                <div className="feature-icon">📱</div>
-                <h3>Easy Access</h3>
-                <p>Access your parsed statements from any device with an internet connection.</p>
-              </div>
-            </div>
-          </div>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="*" element={<LandingPage />} />
+          </Routes>
         ) : (
           <Routes>
             <Route 
               path="/" 
+              element={<NewRequestPage />} 
+            />
+            <Route 
+              path="/history" 
               element={
                 <div className="dashboard-container">
-                  
                   <div className="history-section">
                     {historyError && <div className="error-message">{historyError}</div>}
                     <RequestsHistoryTable 
                       requests={requestsHistory} 
                       isLoading={historyLoading} 
+                      onRequestUpdate={fetchHistory}
                     />
                   </div>
                 </div>
@@ -1326,6 +1345,8 @@ function App() {
             <Route path="/requests/:id" element={<RequestPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/api-docs" element={<ApiDocsPage />} />
+            <Route path="/api-examples" element={<ApiExamplesPage />} />
           </Routes>
         )}
       </main>
