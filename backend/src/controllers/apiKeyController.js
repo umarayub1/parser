@@ -7,7 +7,7 @@ import { generateApiKey } from '../utils/apiKeyUtils.js';
 export async function createApiKey(req, res) {
   try {
     const { name, expiresIn } = req.body;
-    const userId = req.userId;
+    const userId = req.user.id;
     
     // Validate input
     if (!name || !name.trim()) {
@@ -71,8 +71,7 @@ export async function createApiKey(req, res) {
  */
 export async function listApiKeys(req, res) {
   try {
-    const userId = req.userId;
-    
+    const userId = req.user.id;
     const { data, error } = await supabase
       .from('api_keys')
       .select('id, name, key_prefix, created_at, last_used_at, expires_at, is_active')
@@ -105,7 +104,7 @@ export async function updateApiKey(req, res) {
   try {
     const { keyId } = req.params;
     const { is_active } = req.body;
-    const userId = req.userId;
+    const userId = req.user.id;
     
     // Check if the key belongs to the user
     const { data: keyData, error: fetchError } = await supabase
@@ -156,7 +155,7 @@ export async function updateApiKey(req, res) {
 export async function deleteApiKey(req, res) {
   try {
     const { keyId } = req.params;
-    const userId = req.userId;
+    const userId = req.user.id;
     
     // Check if the key belongs to the user
     const { data: keyData, error: fetchError } = await supabase

@@ -3,6 +3,7 @@ import cors from 'cors';
 import config from './config/index.js';
 import apiKeyRoutes from './routes/apiKeyRoutes.js';
 import pdfRoutes from './routes/pdfRoutes.js';
+import supabaseRoutes from './routes/supabaseRoutes.js';
 
 // Initialize Express app
 const app = express();
@@ -20,6 +21,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api', apiKeyRoutes);
 app.use('/api', pdfRoutes);
+app.use('/api/supabase', supabaseRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

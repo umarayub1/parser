@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux'; // Import Redux hooks
 import { supabase } from './supabaseClient';
+import apiClient from './services/api'; // Import the API client
 import { Link, useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import RequestsHistoryTable from './components/RequestsHistoryTable'; // <<< Import History Table
@@ -143,14 +144,9 @@ function App() {
     setHistoryLoading(true);
     setHistoryError(''); // Clear previous errors
     try {
-      const { data, error } = await supabase
-        .from('requests')
-        .select('id, created_at, file_name, page_count, parsing_status, parsed_data') // Added parsed_data to select
-        .eq('user_id', user.id)
-        .eq('is_deleted', false) // Exclude soft-deleted records
-        .order('created_at', { ascending: false }); // Show newest first
+      const { success, data, error } = await apiClient.getRequests();
 
-      if (error) throw error;
+      if (!success || error) throw new Error(error || 'Failed to fetch requests');
 
       console.log("Fetched history:", data);
       setRequestsHistory(data || []);
@@ -221,20 +217,13 @@ function App() {
         file_name: uploadedFile.name,
         file_size: uploadedFile.size,
         page_count: pageCount,
-        payment_status: 'pending',
-        parsing_status: 'pending',
-        user_id: user?.id || null, // <<< Add user ID here if user exists
       };
 
       console.log("Inserting request data:", insertData);
 
-      const { data, error: dbError } = await supabase
-        .from('requests')
-        .insert(insertData)
-        .select('id')
-        .single();
+      const { success, data, error } = await apiClient.createRequest(insertData);
 
-      if (dbError) throw dbError;
+      if (!success || error) throw new Error(error || 'Failed to create request');
       if (!data || !data.id) throw new Error("Failed to create request record or retrieve its ID.");
 
       console.log('Initial request record created with ID:', data.id, 'for user:', user?.id);
@@ -248,20 +237,16 @@ function App() {
   }, [user]); // <<< Added user dependency
 
   const updateRequestRecord = useCallback(async (requestId, updateData) => {
-    // ... (same as before)
-     if (!requestId) {
+    if (!requestId) {
         console.error("Cannot update record without a request ID.");
         console.error("Update failed: Missing request ID.");
         return;
     }
     try {
         console.log(`Updating request ${requestId} with:`, updateData);
-        const { error: dbError } = await supabase
-            .from('requests')
-            .update(updateData)
-            .eq('id', requestId);
+        const { success, error } = await apiClient.updateRequest(requestId, updateData);
 
-        if (dbError) throw dbError;
+        if (!success || error) throw new Error(error || 'Failed to update request');
         console.log(`Request ${requestId} updated successfully.`);
     } catch (err) {
         console.error(`Error updating request record ${requestId}:`, err);
@@ -525,37 +510,38 @@ function App() {
 
   // --- NowPayments Payment Initiation ---
   const handlePayment = async () => {
-    if (!file) {
-      setError('Please select a PDF file first.');
+    if (!file || !pageCount) {
+      setError("Please select a PDF file and upload it first.");
+      setShowSimulateButton(false);
       return;
     }
 
-    setError('');
     setIsLoading(true);
-    setLoadingMessage('Preparing payment invoice...'); // Updated message
-    setPaymentStatus('pending_creation'); // New status
-    setParsedData(null); // Clear any previous results before payment
-    setShowSimulateButton(false);
-    setNeedsParsingTrigger(false);
+    setLoadingMessage('Initializing payment...');
+    setError('');
+    setParsedData(null);
+    setPaymentStatus('pending_creation');
+    setParsingStatus('');
     setNowPaymentsUrl('');
+    setShowSimulateButton(false);
 
     try {
-      // Create initial request record with page count
-      console.log(`Creating initial request record for file ${file.name} with ${pageCount} pages.`);
+      // 1. Create initial request record
       const newRequestId = await createInitialRequestRecord(file, pageCount);
       if (!newRequestId) {
-        throw new Error("Failed to create initial database record.");
+        throw new Error("Failed to create initial request record. Database error.");
       }
+      
       setCurrentRequestId(newRequestId);
       console.log(`Created request record with ID: ${newRequestId}`);
 
       // --- Call Edge Function to create NowPayments Invoice ---
-      const { data, error: functionError } = await supabase.functions.invoke(
+      const { success, data, error } = await apiClient.invokeFunction(
           'create-nowpayments-invoice',
-          { body: { requestId: newRequestId } } 
+          { requestId: newRequestId }
       );
 
-      if (functionError) throw new Error(`Function error: ${functionError.message}`);
+      if (!success || error) throw new Error(`Function error: ${error}`);
       if (data.error) throw new Error(`Invoice creation failed: ${data.error}`);
 
       const { invoiceUrl } = data;
@@ -606,12 +592,12 @@ function App() {
     setShowSimulateButton(false); // Hide button after clicking
 
     try {
-        const { data, error: functionError } = await supabase.functions.invoke(
+        const { success, data, error } = await apiClient.invokeFunction(
             'simulate-payment-success',
-            { body: { requestId: currentRequestId } }
+            { requestId: currentRequestId }
         );
 
-        if (functionError) throw new Error(`Function error: ${functionError.message}`);
+        if (!success || error) throw new Error(`Function error: ${error}`);
         if (data.error) throw new Error(`Simulation failed: ${data.error}`);
 
         console.log("Simulation function executed successfully:", data.message);
@@ -686,47 +672,37 @@ function App() {
       setTotalDuration(0);
 
       try {
-          // 1. Upload file to Supabase Storage
-          const timestamp = Date.now();
-          const filePath = `user_statements/${currentRequestId}_${timestamp}_${file.name}`;
-          console.log(`Uploading to Supabase Storage: ${filePath}`);
-
-          // store the path in the request record
-          await updateRequestRecord(currentRequestId, {
-            storage_path: filePath,
-            parsing_status: 'initiated' // Add this to indicate parsing has started
-          });
-
-          const { error: uploadError } = await supabase
-              .storage
-              .from('statement-uploads') // *** YOUR BUCKET NAME ***
-              .upload(filePath, file);
-
-          if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+          // 1. Upload file to storage via the backend API
+          console.log(`Uploading file via API: ${file.name}`);
+          
+          const { success: uploadSuccess, data: uploadData, error: uploadError } = await apiClient.uploadFile(file, currentRequestId);
+          
+          if (!uploadSuccess || uploadError) {
+            throw new Error(`File upload failed: ${uploadError}`);
+          }
+          
           console.log("File uploaded successfully to Storage.");
-
+          const { storagePath } = uploadData;
+          
+          // 2. Invoke parse function via the backend API
           console.log("Invoking parse-bank-statement function...");
-          const { error: functionError } = await supabase.functions.invoke(
+          const { success: parseSuccess, error: parseError } = await apiClient.invokeFunction(
               'parse-bank-statement',
-              { body: { requestId: currentRequestId, storagePath: filePath } }
+              { requestId: currentRequestId, storagePath }
           );
 
           // Handle IMMEDIATE invocation errors only
-          if (functionError) {
-            throw new Error(`Function invocation failed: ${functionError.message}. Check function logs.`);
+          if (!parseSuccess || parseError) {
+            throw new Error(`Function invocation failed: ${parseError}. Check function logs.`);
           }
           
           console.log("Parse function invoked successfully. Waiting for Realtime status update...");
 
           // --- Fetch created_at time for accurate timer ---
-          const { data: requestDetails, error: fetchError } = await supabase
-            .from('requests')
-            .select('created_at')
-            .eq('id', currentRequestId)
-            .single();
+          const { success: fetchSuccess, data: requestDetails, error: fetchError } = await apiClient.getRequestById(currentRequestId);
 
-          if (fetchError || !requestDetails) {
-              console.warn("Could not fetch created_at for timer, using fallback.", fetchError?.message);
+          if (!fetchSuccess || fetchError || !requestDetails) {
+              console.warn("Could not fetch created_at for timer, using fallback.", fetchError);
               setCreatedAtTime(Date.now()); // Fallback to current time if fetch fails
           } else {
               setCreatedAtTime(new Date(requestDetails.created_at).getTime());
@@ -747,29 +723,19 @@ function App() {
 
           // CRITICAL: Ensure loading state stays active during the entire parsing process
           setIsLoading(true);
-          // Update loading message - timer will be displayed separately
-          setLoadingMessage(`Parsing in progress...`);
-          // Update parsingStatus to ensure UI reflects active parsing
-          setParsingStatus('processing');
-
       } catch (err) {
-          console.error('Error during parsing initiation:', err);
-          setError(`Parsing failed: ${err.message}`);
-          setIsLoading(false); // Stop loading on initiation error
+          console.error('Parsing initiation error:', err);
+          setError(`Parsing error: ${err.message}`);
+          setIsLoading(false);
           setLoadingMessage('');
-          // Clear timer if initiation fails
-          if (timerId) clearInterval(timerId);
-          setTimerId(null);
-          setCreatedAtTime(null);
-          setTotalDuration(0);
-          // Optionally update DB status to error here if initiation failed badly
-          if (currentRequestId) {
-              await updateRequestRecord(currentRequestId, {
-                  parsing_status: 'error',
-                  error_message: `Client-side parsing initiation failed: ${err.message}`
-              });
-          }
-      } 
+          setParsingStatus('error'); // Update UI state
+          
+          // Update the record status
+          await updateRequestRecord(currentRequestId, { 
+              parsing_status: 'error', 
+              error_message: `Failed to start parsing: ${err.message}` 
+          });
+      }
   };
 
   // --- Test File Handling ---

@@ -2,7 +2,7 @@ import supabase from '../services/supabase.js';
 import { validateApiKey } from '../utils/apiKeyUtils.js';
 
 /**
- * Get the user ID from the session token
+ * Get the user from the session token
  */
 export async function getUserFromSession(sessionToken) {
   if (!sessionToken) {
@@ -17,7 +17,7 @@ export async function getUserFromSession(sessionToken) {
       return null;
     }
     
-    return user.id;
+    return user;
   } catch (error) {
     console.error('Error in getUserFromSession:', error);
     return null;
@@ -27,20 +27,21 @@ export async function getUserFromSession(sessionToken) {
 /**
  * User authentication middleware using session token
  */
-export async function authenticate(req, res, next) {
-  // Check for session token
-  const sessionToken = req.headers.authorization?.replace('Bearer ', '');
+export async function authenticateUser(req, res, next) {
+  // Check for session token in Authorization header
+  const authHeader = req.headers.authorization;
   
-  if (!sessionToken) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ 
       success: false, 
       error: 'Authentication required' 
     });
   }
   
-  const userId = await getUserFromSession(sessionToken);
+  const sessionToken = authHeader.replace('Bearer ', '');
+  const user = await getUserFromSession(sessionToken);
   
-  if (!userId) {
+  if (!user) {
     return res.status(401).json({ 
       success: false, 
       error: 'Invalid or expired session' 
@@ -48,7 +49,7 @@ export async function authenticate(req, res, next) {
   }
   
   // Add user to the request object
-  req.userId = userId;
+  req.user = user;
   next();
 }
 
