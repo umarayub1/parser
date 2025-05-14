@@ -5,6 +5,12 @@ import apiKeyRoutes from './routes/apiKeyRoutes.js';
 import pdfRoutes from './routes/pdfRoutes.js';
 import supabaseRoutes from './routes/supabaseRoutes.js';
 
+console.log("--------------------------------------------------");
+console.log("Attempting to start server...");
+console.log("process.env.PORT as seen by Node.js:", process.env.PORT);
+console.log("Port resolved by config.js (config.port):", config.port);
+console.log("--------------------------------------------------");
+
 // Initialize Express app
 const app = express();
 const PORT = config.port;
@@ -19,9 +25,14 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api', apiKeyRoutes);
-app.use('/api', pdfRoutes);
+app.use('/api/apiKey', apiKeyRoutes);
+app.use('/api/parse-pdf', pdfRoutes);
 app.use('/api/supabase', supabaseRoutes);
+
+// Add a simple test route
+app.get('/api/test', (req, res) => {
+  res.status(200).json({ success: true, message: 'Test API endpoint is working!' });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
