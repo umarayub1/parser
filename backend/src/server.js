@@ -25,8 +25,8 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/apiKey', apiKeyRoutes);
-app.use('/api/parse-pdf', pdfRoutes);
+app.use('/api', apiKeyRoutes);
+app.use('/api', pdfRoutes);
 app.use('/api/supabase', supabaseRoutes);
 
 // Add a simple test route
