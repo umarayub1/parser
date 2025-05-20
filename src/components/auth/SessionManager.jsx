@@ -8,6 +8,9 @@ import {
   selectAuthError
 } from '../../store/authSlice';
 
+// Add a timeout value to control how often we check sessions
+const SESSION_REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
+
 // This component doesn't render anything but handles session management
 const SessionManager = () => {
   const dispatch = useDispatch();
@@ -18,36 +21,42 @@ const SessionManager = () => {
   
   // State to track if initial session check has been made
   const [initialSessionAttempted, setInitialSessionAttempted] = useState(false);
+  // Track the last session refresh timestamp
+  const [lastSessionRefresh, setLastSessionRefresh] = useState(0);
   
   // --- Auth Listener -> Dispatch to Redux ---
   useEffect(() => {
-    // Attempt to get session on initial load if:
-    // 1. There's no session in Redux (`!session`)
-    // 2. An attempt hasn't already been made (`!initialSessionAttempted`)
-    // 3. No auth operation is currently pending (`authLoading !== 'pending'`)
-    if (!session && !initialSessionAttempted && authLoading !== 'pending') {
-      setInitialSessionAttempted(true); // Mark that we are making the attempt
+    // Don't run another call if one is in progress
+    if (authLoading === 'pending') {
+      return;
+    }
+    
+    // Get current time
+    const now = Date.now();
+    
+    // Determine if we should refresh based on:
+    // 1. No session in Redux (`!session`) AND not attempted yet
+    // 2. OR enough time has passed since last refresh for a logged-in user
+    const shouldRefreshSession = 
+      (!session && !initialSessionAttempted) || 
+      (user && (now - lastSessionRefresh) > SESSION_REFRESH_INTERVAL);
+    
+    if (shouldRefreshSession) {
+      if (!initialSessionAttempted) {
+        setInitialSessionAttempted(true);
+      }
+      
+      // Update last refresh timestamp
+      setLastSessionRefresh(now);
+      
+      // Dispatch session check
       dispatch(getSessionThunk());
     }
-
-    // Set up an interval to refresh the session periodically if a user is logged in.
-    let sessionRefreshIntervalId = null;
-    if (user) { // Only set up interval if there's a logged-in user
-      sessionRefreshIntervalId = setInterval(() => {
-        // Avoid dispatching if another getSession is already pending from the interval
-        if (authLoading !== 'pending') {
-          dispatch(getSessionThunk());
-        }
-      }, 15 * 60 * 1000); // Refresh every 15 minutes
-    }
-
-    // Cleanup function
-    return () => {
-      if (sessionRefreshIntervalId) {
-        clearInterval(sessionRefreshIntervalId);
-      }
-    };
-  }, [dispatch, user, session, initialSessionAttempted, authLoading]);
+    
+    // No interval needed - we'll use the timestamp tracking approach
+    
+    // No cleanup function required since we're not using intervals
+  }, [dispatch, user, session, initialSessionAttempted, authLoading, lastSessionRefresh]);
 
   // --- Display Auth Error (from Redux) ---
   useEffect(() => {

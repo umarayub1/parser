@@ -5,7 +5,14 @@ const apiCache = {
   credits: {
     value: null,
     timestamp: 0,
-    expiresIn: 60000 // 1 minute cache
+    expiresIn: 60000, // 1 minute cache
+    fetchInProgress: false
+  },
+  session: {
+    value: null,
+    timestamp: 0,
+    expiresIn: 60000, // 1 minute cache
+    fetchInProgress: false
   }
 };
 
@@ -143,41 +150,69 @@ class ApiClient {
       console.log('ApiClient: Using cached credits');
       return apiCache.credits.value;
     }
-
-    console.log('ApiClient: Fetching fresh credits');
-    const sessionResponse = await this.getSession();
-    if (!sessionResponse.success || !sessionResponse.session) {
-      throw new Error('Authentication required');
+    
+    // If there's already a fetch in progress, wait for it instead of making a duplicate call
+    if (apiCache.credits.fetchInProgress) {
+      console.log('ApiClient: Credits fetch already in progress, waiting...');
+      // Wait for the existing fetch to complete (poll every 100ms)
+      return new Promise((resolve) => {
+        const checkCache = () => {
+          if (!apiCache.credits.fetchInProgress) {
+            resolve(apiCache.credits.value);
+          } else {
+            setTimeout(checkCache, 100);
+          }
+        };
+        checkCache();
+      });
     }
 
-    const response = await fetch(`${config.apiBaseUrl}/auth/credits`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${sessionResponse.session.access_token}`
+    try {
+      // Mark that we're fetching
+      apiCache.credits.fetchInProgress = true;
+      console.log('ApiClient: Fetching fresh credits');
+      
+      const sessionResponse = await this.getSession();
+      if (!sessionResponse.success || !sessionResponse.session) {
+        throw new Error('Authentication required');
       }
-    });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to get credits');
+      const response = await fetch(`${config.apiBaseUrl}/auth/credits`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${sessionResponse.session.access_token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get credits');
+      }
+
+      // Update cache
+      apiCache.credits.value = data.credits;
+      apiCache.credits.timestamp = now;
+      
+      return data.credits;
+    } catch (error) {
+      // If there's an error, pass it up but still clear the fetchInProgress flag
+      throw error;
+    } finally {
+      // Always clear the fetch in progress flag
+      apiCache.credits.fetchInProgress = false;
     }
-
-    // Update cache
-    apiCache.credits.value = data.credits;
-    apiCache.credits.timestamp = now;
-
-    return data.credits;
   }
 
   /**
    * Invalidate specific cache entries
-   * @param {string} cacheKey - The cache key to invalidate ('credits', etc.)
+   * @param {string} cacheKey - The cache key to invalidate ('credits', 'session', 'requests', etc.)
    */
   invalidateCache(cacheKey) {
     if (apiCache[cacheKey]) {
       console.log(`ApiClient: Invalidating ${cacheKey} cache`);
       apiCache[cacheKey].value = null;
       apiCache[cacheKey].timestamp = 0;
+      apiCache[cacheKey].fetchInProgress = false;
     }
   }
 
@@ -462,27 +497,77 @@ class ApiClient {
         return { success: false, error: 'No token found' };
       }
       
-      // Validate token with our backend
-      const response = await fetch(`${config.apiBaseUrl}/auth/session`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
-        return { 
-          success: true, 
-          session: data.session || { access_token: token } 
-        };
+      // Check cache first
+      const now = Date.now();
+      if (apiCache.session.value !== null && 
+          (now - apiCache.session.timestamp) < apiCache.session.expiresIn) {
+        console.log('ApiClient: Using cached session');
+        return apiCache.session.value;
       }
       
-      // If session is invalid, clear token
-      localStorage.removeItem('auth_token');
-      return { success: false, error: 'Invalid or expired session' };
+      // If there's already a session fetch in progress, wait for it instead of making a duplicate call
+      if (apiCache.session.fetchInProgress) {
+        console.log('ApiClient: Session fetch already in progress, waiting...');
+        // Wait for the existing fetch to complete (poll every 100ms)
+        return new Promise((resolve) => {
+          const checkCache = () => {
+            if (!apiCache.session.fetchInProgress) {
+              resolve(apiCache.session.value);
+            } else {
+              setTimeout(checkCache, 100);
+            }
+          };
+          checkCache();
+        });
+      }
+      
+      try {
+        // Mark that we're fetching
+        apiCache.session.fetchInProgress = true;
+        console.log('ApiClient: Validating session with backend');
+        
+        // Validate token with our backend
+        const response = await fetch(`${config.apiBaseUrl}/auth/session`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        let result;
+        
+        if (response.ok && data.success) {
+          result = { 
+            success: true, 
+            session: data.session || { access_token: token } 
+          };
+        } else {
+          // If session is invalid, clear token
+          localStorage.removeItem('auth_token');
+          result = { success: false, error: 'Invalid or expired session' };
+        }
+        
+        // Update cache
+        apiCache.session.value = result;
+        apiCache.session.timestamp = now;
+        
+        return result;
+      } catch (error) {
+        console.error('Error getting session:', error);
+        const result = { success: false, error: error.message };
+        
+        // Update cache with error result
+        apiCache.session.value = result;
+        apiCache.session.timestamp = now;
+        
+        return result;
+      } finally {
+        // Always clear the fetch in progress flag
+        apiCache.session.fetchInProgress = false;
+      }
     } catch (error) {
-      console.error('Error getting session:', error);
+      console.error('Unexpected error in getSession:', error);
       return { success: false, error: error.message };
     }
   }

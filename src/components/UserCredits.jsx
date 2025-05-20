@@ -5,14 +5,29 @@ import { selectUser } from '../store/authSlice';
 import ApiClient from './ApiClient';
 import './UserCredits.css';
 
+// Create a debounce helper function
+const debounce = (func, wait) => {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+};
+
 function UserCredits() {
   const [credits, setCredits] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const user = useSelector(selectUser);
-
+  
+  // Use the useEffect hook with better dependency tracking
   useEffect(() => {
-    const fetchUserCredits = async () => {
-      if (!user) {
+    let isMounted = true;
+    const fetchCreditsOnce = debounce(async () => {
+      if (!user || !isMounted) {
         setIsLoading(false);
         return;
       }
@@ -21,16 +36,27 @@ function UserCredits() {
         setIsLoading(true);
         // ApiClient now handles caching internally
         const credits = await ApiClient.getCredits();
-        setCredits(credits || 0);
+        if (isMounted) {
+          setCredits(credits || 0);
+        }
       } catch (err) {
         console.error('Error fetching user credits:', err);
-        setCredits(0);
+        if (isMounted) {
+          setCredits(0);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-    };
+    }, 300); // 300ms debounce
     
-    fetchUserCredits();
+    fetchCreditsOnce();
+    
+    // Cleanup function to prevent state updates after unmount
+    return () => {
+      isMounted = false;
+    };
   }, [user?.id]); // Only re-run if user ID changes, not the entire user object
 
   if (!user) {
