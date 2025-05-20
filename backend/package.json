@@ -11,6 +11,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@lemonsqueezy/lemonsqueezy.js": "^4.0.0",
     "@supabase/supabase-js": "^2.49.4",
     "axios": "^1.9.0",
     "concurrently": "^8.2.2",
@@ -22,7 +23,10 @@
     "node-fetch": "^3.3.2",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^5.2.133"
+    "pdfjs-dist": "^5.2.133",
+    "raw-body": "^3.0.0",
+    "resend": "^2.0.0",
+    "stripe": "^14.9.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
 import { signup, signInWithOAuthThunk, selectSession, selectAuthLoading, selectAuthError } from '../store/authSlice';
 import '../styles/auth.css';
 

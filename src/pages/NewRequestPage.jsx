@@ -11,6 +11,7 @@ import BalancesTable from '../components/BalancesTable';
 import UserCredits from '../components/UserCredits'; // Import UserCredits component
 import SummaryPlaceholder from '../components/SummaryPlaceholder';
 import DownloadDataButton from '../components/DownloadDataButton'; // Import our new component
+import apiClient from '../components/ApiClient.js'; // Corrected import path to components
 // import PdfPreview from '../components/PdfPreview'; // Using iframe directly for now
 
 // Import Redux selectors/actions if needed (currently only uses user)
@@ -65,8 +66,10 @@ function formatTime(ms) {
 
 
 function NewRequestPage() {
+  console.log('NewRequestPage component rendered!');
+  
   const navigate = useNavigate();
-  const dispatch = useDispatch(); // Now used for auth initialization
+  const dispatch = useDispatch();
   const user = useSelector(selectUser); // Get user from Redux
 
   // --- State from original App.jsx ---
@@ -98,14 +101,18 @@ function NewRequestPage() {
 
   // --- Auth Initialization ---
   useEffect(() => {
-    // Make sure we have the latest session data
-    dispatch(getSessionThunk());
+    // Only try to get session if we don't already have user data
+    if (!user) {
+      dispatch(getSessionThunk());
+    }
     
     // Set up auth state change listener
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         console.log("NewRequestPage: Auth state changed:", _event);
-        dispatch(setSession(session));
+        if (session) {
+          dispatch(setSession(session));
+        }
       }
     );
     
@@ -115,28 +122,26 @@ function NewRequestPage() {
         authListener.subscription.unsubscribe();
       }
     };
-  }, [dispatch]);
+  }, [dispatch, user]);
 
   // Fetch user credits
   useEffect(() => {
     const fetchUserCredits = async () => {
       if (!user) {
+        setUserCredits(0); // Clear credits if no user
         return;
       }
       
       try {
         setIsLoadingCredits(true);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('credits_remaining')
-          .eq('id', user.id)
-          .single();
-        
-        if (error) throw error;
-        
-        setUserCredits(data?.credits_remaining || 0);
+        // Use apiClient to fetch credits
+        const credits = await apiClient.getCredits(); 
+        // The ApiClient.getCredits() method now directly returns the number of credits
+        // or throws an error if the fetch fails.
+        setUserCredits(credits || 0);
       } catch (err) {
-        console.error('Error fetching user credits:', err);
+        console.error('Error fetching user credits via ApiClient:', err.message);
+        setUserCredits(0); // Set to 0 or handle error appropriately
       } finally {
         setIsLoadingCredits(false);
       }
@@ -423,13 +428,15 @@ function NewRequestPage() {
           if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
           console.log("File uploaded successfully to Storage.");
 
-          console.log("Invoking parse-bank-statement function...");
-          const { error: functionError } = await supabase.functions.invoke(
+          console.log("Invoking parse-bank-statement function via backend API...");
+          const { success, error: functionError } = await apiClient.invokeFunction(
               'parse-bank-statement',
-              { body: { requestId: reqId, storagePath: filePath } }
+              { requestId: reqId, storagePath: filePath }
           );
-          if (functionError) throw new Error(`Function invocation failed: ${functionError.message}. Check function logs.`);
-          console.log("Parse function invoked successfully. Waiting for Realtime...");
+          if (!success || functionError) {
+            throw new Error(`Backend API call to parse-bank-statement failed: ${functionError}. Check backend logs.`);
+          }
+          console.log("Parse function invoked successfully via backend API. Waiting for Realtime...");
 
           // Fetch created_at for timer
           const { data: requestDetails, error: fetchError } = await supabase

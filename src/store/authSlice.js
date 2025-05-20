@@ -1,6 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import ApiClient from '../components/ApiClient';
-import { supabase } from '../supabaseClient';
 
 // Initial state
 const initialState = {
@@ -73,22 +72,44 @@ export const fetchCredits = createAsyncThunk(
   }
 );
 
-// New thunks for session management
+// Updated thunks for session management
 export const getSessionThunk = createAsyncThunk(
   'auth/getSession',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) throw error;
+      const response = await ApiClient.getSession();
       
-      dispatch(setSession(session));
-      
-      if (session?.user) {
-        dispatch(setUser(session.user));
+      if (response.success && response.session) {
+        // Set session first
+        dispatch(setSession(response.session));
+        
+        // If session contains user or we can extract user details, set the user
+        if (response.session?.user) {
+          dispatch(setUser(response.session.user));
+        } else {
+          // Try to fetch user details if session exists but user info is missing
+          try {
+            const userData = await ApiClient.getCurrentUser();
+            if (userData) {
+              dispatch(setUser(userData));
+            }
+          } catch (userError) {
+            console.error("Failed to fetch user details:", userError);
+          }
+        }
+        
+        return response.session;
+      } else {
+        // If no valid session, ensure user state is cleared
+        dispatch(setSession(null));
+        dispatch(setUser(null));
+        return null;
       }
-      
-      return session;
     } catch (error) {
+      console.error("Session retrieval error:", error);
+      // On error, ensure user state is cleared
+      dispatch(setSession(null));
+      dispatch(setUser(null));
       return rejectWithValue(error.message);
     }
   }
@@ -98,15 +119,16 @@ export const signInWithOAuthThunk = createAsyncThunk(
   'auth/signInWithOAuth',
   async ({ provider }, { rejectWithValue }) => {
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
+      // Get OAuth URL from our backend
+      const response = await ApiClient.googleSignIn();
       
-      if (error) throw error;
-      return data;
+      if (response.success && response.url) {
+        // Redirect to the OAuth provider
+        window.location.href = response.url;
+        return { redirected: true };
+      } else {
+        throw new Error('Failed to initiate OAuth sign in');
+      }
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -117,14 +139,17 @@ export const signOutThunk = createAsyncThunk(
   'auth/signOut',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      const response = await ApiClient.logout();
       
+      // Clear local state regardless of API success
       dispatch(setSession(null));
       dispatch(setUser(null));
       
       return null;
     } catch (error) {
+      // Still clear local state even if API call fails
+      dispatch(setSession(null));
+      dispatch(setUser(null));
       return rejectWithValue(error.message);
     }
   }
@@ -268,10 +293,10 @@ const authSlice = createSlice({
   }
 });
 
-// Actions
+// Export actions
 export const { setUser, setSession, clearError } = authSlice.actions;
 
-// Selectors
+// Export selectors
 export const selectUser = (state) => state.auth.user;
 export const selectSession = (state) => state.auth.session;
 export const selectAuthLoading = (state) => state.auth.authLoading;
@@ -279,5 +304,5 @@ export const selectAuthError = (state) => state.auth.error;
 export const selectCredits = (state) => state.auth.credits;
 export const selectIsAuthenticated = (state) => !!state.auth.user;
 
-// Reducer
+// Export reducer
 export default authSlice.reducer; 

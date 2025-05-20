@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
 import { login, signInWithOAuthThunk, selectSession, selectAuthLoading, selectAuthError } from '../store/authSlice';
 import '../styles/auth.css';
 
@@ -9,7 +8,6 @@ const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
-  const [shouldRedirect, setShouldRedirect] = useState(false);
   
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -17,24 +15,13 @@ const LoginPage = () => {
   const authLoading = useSelector(selectAuthLoading);
   const authError = useSelector(selectAuthError);
   
-  // Check for session on initial render and when session changes
+  // Single redirection effect based on session state
   useEffect(() => {
     if (session) {
-      console.log("Session detected, will redirect to home");
-      // Short delay to ensure state updates complete
-      setTimeout(() => {
-        setShouldRedirect(true);
-      }, 100);
+      console.log("Session detected, redirecting to new-request");
+      navigate('/new-request');
     }
-  }, [session]);
-  
-  // Handle the redirect when shouldRedirect becomes true
-  useEffect(() => {
-    if (shouldRedirect) {
-      console.log("Redirecting to home page now");
-      navigate('/');
-    }
-  }, [shouldRedirect, navigate]);
+  }, [session, navigate]);
   
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -43,21 +30,17 @@ const LoginPage = () => {
     try {
       console.log("Attempting login with email:", email);
       
-      // Use Redux login thunk instead of direct Supabase call
+      // Use Redux login thunk
       const resultAction = await dispatch(login({ email, password }));
       
       // Check if the login was successful
-      if (login.fulfilled.match(resultAction)) {
-        console.log("Login successful, session data:", resultAction.payload.session);
-        
-        // Navigate programmatically after successful login
-        console.log("Login successful, navigating to home");
-        navigate('/');
-      } else if (login.rejected.match(resultAction)) {
+      if (login.rejected.match(resultAction)) {
         // Extract the error message from the rejected action
         const error = resultAction.payload || resultAction.error.message;
         throw new Error(error);
       }
+      
+      // The session change will trigger the useEffect for navigation
     } catch (err) {
       setError(err.message);
       console.error('Error logging in:', err);
@@ -79,10 +62,9 @@ const LoginPage = () => {
     }
   };
   
-  // If already logged in and redirect is ready, redirect to home
-  if (shouldRedirect && session) {
-    console.log("Rendering redirect to home");
-    return <Navigate to="/" />;
+  // If already logged in, show loading or redirect immediately
+  if (session) {
+    return <Navigate to="/new-request" />;
   }
   
   return (

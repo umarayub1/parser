@@ -7,7 +7,7 @@ import App from './App.jsx'
 import './index.css'
 import RequestPage from './components/RequestPage'
 import NewRequestPage from './pages/NewRequestPage'
-import CryptoTopUpPage from './pages/CryptoTopUpPage'
+import SubscriptionsPage from './pages/SubscriptionsPage'
 
 // Create a meta viewport tag for mobile responsiveness
 const setViewportMeta = () => {

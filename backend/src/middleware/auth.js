@@ -6,21 +6,30 @@ import { validateApiKey } from '../utils/apiKeyUtils.js';
  */
 export async function getUserFromSession(sessionToken) {
   if (!sessionToken) {
-    return null;
+    return { user: null, session: null };
   }
   
   try {
+    // Get user from session token
     const { data: { user }, error } = await supabase.auth.getUser(sessionToken);
     
     if (error || !user) {
       console.error('Error getting user from session:', error);
-      return null;
+      return { user: null, session: null };
     }
     
-    return user;
+    // Get session data
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('Error getting session:', sessionError);
+      return { user, session: null };
+    }
+    
+    return { user, session };
   } catch (error) {
     console.error('Error in getUserFromSession:', error);
-    return null;
+    return { user: null, session: null };
   }
 }
 
@@ -39,7 +48,7 @@ export async function authenticateUser(req, res, next) {
   }
   
   const sessionToken = authHeader.replace('Bearer ', '');
-  const user = await getUserFromSession(sessionToken);
+  const { user, session } = await getUserFromSession(sessionToken);
   
   if (!user) {
     return res.status(401).json({ 
@@ -48,8 +57,9 @@ export async function authenticateUser(req, res, next) {
     });
   }
   
-  // Add user to the request object
+  // Add user and session to the request object
   req.user = user;
+  req.session = session;
   next();
 }
 

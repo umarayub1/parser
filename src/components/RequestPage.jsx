@@ -10,6 +10,7 @@ import UserCredits from './UserCredits';
 import SummaryPlaceholder from './SummaryPlaceholder';
 import DownloadDataButton from './DownloadDataButton';
 import '../App.css';
+import ApiClient from '../../src/components/ApiClient';
 
 // Helper function to format time
 function formatTime(ms) {
@@ -119,70 +120,68 @@ function RequestPage() {
 
       try {
         // Fetch request details regardless of cache to get latest status
-        const { data: requestData, error: requestError } = await supabase
-          .from('requests')
-          .select('*')
-          .eq('id', requestId)
-          .single();
+        const details = await ApiClient.getRequestById(requestId);
+        if (details.success && details.data) {
+          if (!isMounted) return;
 
-        if (!isMounted) return;
+          console.log("Fresh request data fetched:", details.data);
+          // Update state and cache
+          setRequest(details.data);
+          setCachedData(cacheKeyRequest, details.data);
+          setError(''); // Clear previous errors on successful fetch
 
-        if (requestError) throw new Error(`Request fetch error: ${requestError.message}`);
-        if (!requestData) throw new Error('Request not found.');
-
-        console.log("Fresh request data fetched:", requestData);
-        // Update state and cache
-        setRequest(requestData);
-        setCachedData(cacheKeyRequest, requestData);
-        setError(''); // Clear previous errors on successful fetch
-
-        // Process parsed data if successful
-        if (requestData.parsing_status === 'success' && requestData.parsed_data) {
-          try {
-            const receivedData = typeof requestData.parsed_data === 'string'
-              ? JSON.parse(requestData.parsed_data)
-              : requestData.parsed_data;
-            if (!receivedData?.meta_data || !receivedData?.transactions_data) {
-              throw new Error("Fetched data is missing expected structure.");
+          // Process parsed data if successful
+          if (details.data.parsing_status === 'success' && details.data.parsed_data) {
+            try {
+              const receivedData = typeof details.data.parsed_data === 'string'
+                ? JSON.parse(details.data.parsed_data)
+                : details.data.parsed_data;
+              if (!receivedData?.meta_data || !receivedData?.transactions_data) {
+                throw new Error("Fetched data is missing expected structure.");
+              }
+              setParsedData(receivedData);
+              setCachedData(cacheKeyParsed, receivedData); // Cache parsed data
+            } catch (parseErr) {
+              console.error("Error parsing fetched data:", parseErr);
+              setError(`Failed to process results: ${parseErr.message}`);
+              setParsedData(null); // Clear potentially stale parsed data
+              sessionStorage.removeItem(cacheKeyParsed); // Remove invalid item from cache
             }
-            setParsedData(receivedData);
-            setCachedData(cacheKeyParsed, receivedData); // Cache parsed data
-          } catch (parseErr) {
-            console.error("Error parsing fetched data:", parseErr);
-            setError(`Failed to process results: ${parseErr.message}`);
+          } else if (details.data.parsing_status === 'error') {
+            setError(`Parsing failed: ${details.data.error_message || 'Unknown error'}`);
             setParsedData(null); // Clear potentially stale parsed data
-            sessionStorage.removeItem(cacheKeyParsed); // Remove invalid item from cache
+            sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data if status is error
+          } else {
+            // If status is pending/processing, ensure parsedData state is null
+            setParsedData(null);
+            sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data if not success/error
           }
-        } else if (requestData.parsing_status === 'error') {
-          setError(`Parsing failed: ${requestData.error_message || 'Unknown error'}`);
-          setParsedData(null); // Clear potentially stale parsed data
-          sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data if status is error
+
+          // Fetch Preview URL (always fetch, don't cache)
+          if (details.data.storage_path) {
+            console.log("Fetching PDF preview URL for path:", details.data.storage_path);
+            try {
+              const { data: urlData, error: urlError } = await supabase
+                .storage
+                .from('statement-uploads')
+                .createSignedUrl(details.data.storage_path, 60 * 60); // 1 hour validity
+
+              if (!isMounted) return;
+
+              if (urlError) throw new Error(`Preview URL error: ${urlError.message}`);
+
+              console.log("Signed URL fetched:", urlData.signedUrl);
+              setPreviewUrl(urlData.signedUrl);
+            } catch (previewErr) {
+               // Don't overwrite main error state if preview fails, just log it
+              console.error("Error fetching PDF preview URL:", previewErr);
+              // Optionally set a specific preview error state if needed
+            }
+          }
+
         } else {
-          // If status is pending/processing, ensure parsedData state is null
-          setParsedData(null);
-          sessionStorage.removeItem(cacheKeyParsed); // Remove parsed data if not success/error
-        }
-
-        // Fetch Preview URL (always fetch, don't cache)
-        if (requestData.storage_path) {
-          console.log("Fetching PDF preview URL for path:", requestData.storage_path);
-          try {
-            const { data: urlData, error: urlError } = await supabase
-              .storage
-              .from('statement-uploads')
-              .createSignedUrl(requestData.storage_path, 60 * 60); // 1 hour validity
-
-            if (!isMounted) return;
-
-            if (urlError) throw new Error(`Preview URL error: ${urlError.message}`);
-
-            console.log("Signed URL fetched:", urlData.signedUrl);
-            setPreviewUrl(urlData.signedUrl);
-          } catch (previewErr) {
-             // Don't overwrite main error state if preview fails, just log it
-            console.error("Error fetching PDF preview URL:", previewErr);
-            // Optionally set a specific preview error state if needed
-          }
+          console.error('Request not found.');
+          setError('Request not found.');
         }
 
       } catch (err) { // Catch errors from fetching request or parsing URL

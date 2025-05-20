@@ -293,14 +293,39 @@ export const invokeFunction = async (req, res) => {
       }
     }
     
-    const { data, error } = await supabase.functions.invoke(functionName, { body });
+    // Forward to the migrated functions endpoints
+    console.log(`Forwarding to migrated function: ${functionName}`);
     
-    if (error) throw error;
+    // Create a request to the appropriate functions endpoint
+    const functionsUrl = `/api/functions/${functionName}`;
     
-    return res.status(200).json({
-      success: true,
-      data
-    });
+    // Redirect to the appropriate function endpoint
+    req.url = functionsUrl;
+    
+    // Import and call the corresponding function from functionsController
+    let result;
+    switch (functionName) {
+      case 'parse-bank-statement':
+        const { parseBankStatement } = await import('../controllers/functionsController.js');
+        result = await parseBankStatement(req, res);
+        break;
+      case 'create-nowpayments-invoice':
+        const { createNowpaymentsInvoice } = await import('../controllers/functionsController.js');
+        result = await createNowpaymentsInvoice(req, res);
+        break;
+      case 'simulate-payment-success':
+        const { simulatePaymentSuccess } = await import('../controllers/functionsController.js');
+        result = await simulatePaymentSuccess(req, res);
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid function name'
+        });
+    }
+    
+    return result;
+    
   } catch (error) {
     console.error(`Error invoking function ${req.params.functionName}:`, error);
     return res.status(500).json({

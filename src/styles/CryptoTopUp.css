@@ -347,4 +347,113 @@
   .amount-options {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Add styles for subscription plans without removing existing styles */
+
+/* Subscription plans container */
+.subscription-plans {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+/* Subscription plan card */
+.subscription-plan-card {
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.subscription-plan-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Plan name */
+.plan-name {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #333;
+  text-align: center;
+}
+
+/* Plan price */
+.plan-price {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #0052cc;
+  text-align: center;
+}
+
+.plan-price span {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: #666;
+}
+
+/* Plan credits */
+.plan-credits {
+  font-size: 1.1rem;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+/* Features list */
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem 0;
+  flex-grow: 1;
+}
+
+.feature-item {
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+  position: relative;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.feature-item::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #4caf50;
+  font-weight: bold;
+}
+
+/* Current subscription status */
+.subscription-status {
+  margin-bottom: 2rem;
+}
+
+.current-subscription {
+  background-color: #f5f9ff;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  border-left: 4px solid #0052cc;
+}
+
+.subscription-label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.renewal-info {
+  font-size: 0.9rem;
+  color: #666;
 } 

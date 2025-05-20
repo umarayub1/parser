@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { selectUser } from '../store/authSlice';
-import { supabase } from '../supabaseClient';
+import ApiClient from './ApiClient';
 import './UserCredits.css';
 
 function UserCredits() {
@@ -19,24 +19,19 @@ function UserCredits() {
       
       try {
         setIsLoading(true);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('credits_remaining')
-          .eq('id', user.id)
-          .single();
-        
-        if (error) throw error;
-        
-        setCredits(data?.credits_remaining || 0);
+        // ApiClient now handles caching internally
+        const credits = await ApiClient.getCredits();
+        setCredits(credits || 0);
       } catch (err) {
         console.error('Error fetching user credits:', err);
+        setCredits(0);
       } finally {
         setIsLoading(false);
       }
     };
     
     fetchUserCredits();
-  }, [user]);
+  }, [user?.id]); // Only re-run if user ID changes, not the entire user object
 
   if (!user) {
     return null;

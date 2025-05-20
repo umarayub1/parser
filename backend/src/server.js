@@ -4,12 +4,11 @@ import config from './config/index.js';
 import apiKeyRoutes from './routes/apiKeyRoutes.js';
 import pdfRoutes from './routes/pdfRoutes.js';
 import supabaseRoutes from './routes/supabaseRoutes.js';
-
-console.log("--------------------------------------------------");
-console.log("Attempting to start server...");
-console.log("process.env.PORT as seen by Node.js:", process.env.PORT);
-console.log("Port resolved by config.js (config.port):", config.port);
-console.log("--------------------------------------------------");
+import functionsRoutes from './routes/functionsRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import { handleLemonSqueezyWebhook } from './controllers/subscriptionController.js';
+import getRawBody from 'raw-body';
 
 // Initialize Express app
 const app = express();
@@ -17,6 +16,23 @@ const PORT = config.port;
 
 // Middleware
 app.use(cors());
+
+// Handle Lemon Squeezy webhooks - Must be before JSON middleware for signature verification
+app.post('/api/webhooks/lemonsqueezy', async (req, res) => {
+  try {
+    // Get raw body for webhook signature verification
+    const rawBody = await getRawBody(req);
+    req.rawBody = rawBody.toString('utf8');
+    req.body = JSON.parse(req.rawBody);
+    
+    return handleLemonSqueezyWebhook(req, res);
+  } catch (error) {
+    console.error('Webhook processing error:', error.message);
+    return res.status(500).json({ success: false, error: 'Failed to process webhook' });
+  }
+});
+
+// Standard JSON parsing for all other routes
 app.use(express.json());
 
 // Health check endpoint
@@ -27,7 +43,10 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api', apiKeyRoutes);
 app.use('/api', pdfRoutes);
+app.use('/api', authRoutes);
+app.use('/api', subscriptionRoutes);
 app.use('/api/supabase', supabaseRoutes);
+app.use('/api/functions', functionsRoutes);
 
 // Add a simple test route
 app.get('/api/test', (req, res) => {

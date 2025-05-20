@@ -1,5 +1,13 @@
-import { supabase } from '../supabaseClient';
 import config from '../config';
+
+// Global cache for frequently accessed data
+const apiCache = {
+  credits: {
+    value: null,
+    timestamp: 0,
+    expiresIn: 60000 // 1 minute cache
+  }
+};
 
 /**
  * API Client for interacting with the backend API
@@ -12,7 +20,7 @@ class ApiClient {
    * @param {string} fullName - User's full name (optional)
    * @returns {Promise<Object>} - Signup result
    */
-  static async signup(email, password, fullName = null) {
+  async signup(email, password, fullName = null) {
     const response = await fetch(`${config.apiBaseUrl}/auth/signup`, {
       method: 'POST',
       headers: {
@@ -39,60 +47,41 @@ class ApiClient {
    * @param {string} password - User password
    * @returns {Promise<Object>} - Login result with session and user
    */
-  static async login(email, password) {
-    // Try the backend API first
-    try {
-      const response = await fetch(`${config.apiBaseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
+  async login(email, password) {
+    const response = await fetch(`${config.apiBaseUrl}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, password })
+    });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      // Store session in Supabase to maintain session state
-      await supabase.auth.setSession({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token
-      });
-
-      return data;
-    } catch (error) {
-      console.error('API login failed, falling back to Supabase:', error);
-      
-      // Fall back to Supabase direct login if API is not available
-      const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      
-      if (supabaseError) {
-        throw supabaseError;
-      }
-      
-      return data;
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Login failed');
     }
+
+    // Store auth token in localStorage for persistence
+    if (data.session?.access_token) {
+      localStorage.setItem('auth_token', data.session.access_token);
+    }
+
+    return data;
   }
 
   /**
    * User logout
    * @returns {Promise<Object>} - Logout result
    */
-  static async logout() {
-    const session = await this.getSession();
+  async logout() {
+    const sessionResponse = await this.getSession();
     
-    if (session) {
+    if (sessionResponse.success && sessionResponse.session) {
       try {
-        // Try the backend API first
         const response = await fetch(`${config.apiBaseUrl}/auth/logout`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`
+            'Authorization': `Bearer ${sessionResponse.session.access_token}`
           }
         });
 
@@ -100,15 +89,12 @@ class ApiClient {
           throw new Error('API logout failed');
         }
       } catch (error) {
-        console.error('API logout failed, falling back to Supabase:', error);
+        console.error('API logout failed:', error);
       }
     }
     
-    // Always sign out via Supabase to clear local session
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      throw error;
-    }
+    // Clear local storage token
+    localStorage.removeItem('auth_token');
     
     return { success: true };
   }
@@ -117,9 +103,9 @@ class ApiClient {
    * Get current user with profile information
    * @returns {Promise<Object|null>} - User object or null if not authenticated
    */
-  static async getCurrentUser() {
-    const session = await this.getSession();
-    if (!session) {
+  async getCurrentUser() {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session) {
       return null;
     }
 
@@ -127,7 +113,7 @@ class ApiClient {
       const response = await fetch(`${config.apiBaseUrl}/auth/user`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${sessionResponse.session.access_token}`
         }
       });
 
@@ -138,32 +124,36 @@ class ApiClient {
 
       return data.user;
     } catch (error) {
-      console.error('API user fetch failed, falling back to Supabase:', error);
-      
-      // Fall back to Supabase
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        throw userError;
-      }
-      
-      return user;
+      console.error('Failed to get user profile:', error);
+      return null;
     }
   }
 
   /**
-   * Get user's remaining credits
+   * Get user's remaining credits (cached version)
+   * @param {boolean} forceRefresh - Whether to force a fresh API call
    * @returns {Promise<number>} - Number of credits remaining
    */
-  static async getCredits() {
-    const session = await this.getSession();
-    if (!session) {
+  async getCredits(forceRefresh = false) {
+    // Check cache first if not forcing refresh
+    const now = Date.now();
+    if (!forceRefresh && 
+        apiCache.credits.value !== null && 
+        (now - apiCache.credits.timestamp) < apiCache.credits.expiresIn) {
+      console.log('ApiClient: Using cached credits');
+      return apiCache.credits.value;
+    }
+
+    console.log('ApiClient: Fetching fresh credits');
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session) {
       throw new Error('Authentication required');
     }
 
     const response = await fetch(`${config.apiBaseUrl}/auth/credits`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${sessionResponse.session.access_token}`
       }
     });
 
@@ -172,7 +162,23 @@ class ApiClient {
       throw new Error(data.error || 'Failed to get credits');
     }
 
+    // Update cache
+    apiCache.credits.value = data.credits;
+    apiCache.credits.timestamp = now;
+
     return data.credits;
+  }
+
+  /**
+   * Invalidate specific cache entries
+   * @param {string} cacheKey - The cache key to invalidate ('credits', etc.)
+   */
+  invalidateCache(cacheKey) {
+    if (apiCache[cacheKey]) {
+      console.log(`ApiClient: Invalidating ${cacheKey} cache`);
+      apiCache[cacheKey].value = null;
+      apiCache[cacheKey].timestamp = 0;
+    }
   }
 
   /**
@@ -181,9 +187,9 @@ class ApiClient {
    * @param {string} expiresIn - Expiration period (e.g. '30', '90', 'never')
    * @returns {Promise<Object>} - Created API key data
    */
-  static async createApiKey(name, expiresIn = 'never') {
-    const session = await this.getSession();
-    if (!session) {
+  async createApiKey(name, expiresIn = 'never') {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session) {
       throw new Error('Authentication required');
     }
 
@@ -191,7 +197,7 @@ class ApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${sessionResponse.session.access_token}`
       },
       body: JSON.stringify({ name, expiresIn })
     });
@@ -208,16 +214,16 @@ class ApiClient {
    * Get all API keys for the current user
    * @returns {Promise<Array>} - List of API keys
    */
-  static async getApiKeys() {
-    const session = await this.getSession();
-    if (!session) {
+  async getApiKeys() {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session) {
       throw new Error('Authentication required');
     }
 
     const response = await fetch(`${config.apiBaseUrl}/keys`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${sessionResponse.session.access_token}`
       }
     });
 
@@ -235,9 +241,9 @@ class ApiClient {
    * @param {boolean} isActive - Whether the key should be active
    * @returns {Promise<Object>} - Update result
    */
-  static async updateApiKey(keyId, isActive) {
-    const session = await this.getSession();
-    if (!session) {
+  async updateApiKey(keyId, isActive) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session) {
       throw new Error('Authentication required');
     }
 
@@ -245,7 +251,7 @@ class ApiClient {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${sessionResponse.session.access_token}`
       },
       body: JSON.stringify({ is_active: isActive })
     });
@@ -263,16 +269,16 @@ class ApiClient {
    * @param {string} keyId - ID of the API key
    * @returns {Promise<Object>} - Deletion result
    */
-  static async deleteApiKey(keyId) {
-    const session = await this.getSession();
-    if (!session) {
+  async deleteApiKey(keyId) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session) {
       throw new Error('Authentication required');
     }
 
     const response = await fetch(`${config.apiBaseUrl}/keys/${keyId}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${sessionResponse.session.access_token}`
       }
     });
 
@@ -290,16 +296,16 @@ class ApiClient {
    * @param {number} limit - Maximum number of requests to return
    * @returns {Promise<Array>} - List of API requests
    */
-  static async getApiRequests(keyId, limit = 50) {
-    const session = await this.getSession();
-    if (!session) {
+  async getApiRequests(keyId, limit = 50) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session) {
       throw new Error('Authentication required');
     }
 
     const response = await fetch(`${config.apiBaseUrl}/keys/${keyId}/requests?limit=${limit}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${sessionResponse.session.access_token}`
       }
     });
 
@@ -319,7 +325,7 @@ class ApiClient {
    * @param {Object} additionalInfo - Optional additional information
    * @returns {Promise<Object>} - Parsing job information
    */
-  static async parsePdf(file, apiKey, callbackUrl = null, additionalInfo = null) {
+  async parsePdf(file, apiKey, callbackUrl = null, additionalInfo = null) {
     const formData = new FormData();
     formData.append('file', file);
     
@@ -353,7 +359,7 @@ class ApiClient {
    * @param {string} apiKey - API key for authentication
    * @returns {Promise<Object>} - Status information
    */
-  static async checkParsingStatus(requestId, apiKey) {
+  async checkParsingStatus(requestId, apiKey) {
     const response = await fetch(`${config.apiBaseUrl}/parse-status/${requestId}`, {
       method: 'GET',
       headers: {
@@ -374,7 +380,7 @@ class ApiClient {
    * @param {string} apiKey - API key to verify
    * @returns {Promise<Object>} - Verification result
    */
-  static async verifyApiKey(apiKey) {
+  async verifyApiKey(apiKey) {
     const response = await fetch(`${config.apiBaseUrl}/verify-key`, {
       method: 'GET',
       headers: {
@@ -391,17 +397,264 @@ class ApiClient {
   }
 
   /**
+   * Invoke a backend function
+   * @param {string} functionName - The name of the function to invoke
+   * @param {Object} body - The payload to send to the function
+   * @returns {Promise<Object>} - The result from the function
+   */
+  async invokeFunction(functionName, body) {
+    const sessionResponse = await this.getSession();
+    const session = sessionResponse.success ? sessionResponse.session : null;
+    
+    if (!session?.access_token) {
+      // For publicly accessible functions or functions that handle their own auth,
+      // we might proceed without a session token, but backend must be designed for this.
+      // For now, let's assume most invoked functions require auth.
+      // If a specific function is public, this check might need to be bypassed or handled differently.
+      console.warn(`invokeFunction '${functionName}': No active session or access token. Proceeding without Authorization header.`);
+      // Depending on backend setup, this might be an error or expected for some functions.
+      // throw new Error('Authentication required to invoke function'); 
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/functions/${functionName}`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(body)
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) {
+        // Log more details for easier debugging
+        console.error(`Error invoking function ${functionName}:`, {
+          status: response.status,
+          statusText: response.statusText,
+          body: responseData
+        });
+        throw new Error(responseData.error || responseData.message || `Failed to invoke function ${functionName}. Status: ${response.status}`);
+      }
+      return responseData; // Return the full response data object which should include { success, data, error, message }
+    } catch (error) {
+      console.error(`Network or other error invoking function ${functionName}:`, error);
+      // Ensure a consistent error structure if possible, or re-throw
+      throw new Error(error.message || `A network or unexpected error occurred while invoking ${functionName}.`);
+    }
+  }
+
+  /**
    * Get current session
    * @returns {Promise<Object|null>} - Session object or null if not authenticated
    */
-  static async getSession() {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) {
+  async getSession() {
+    try {
+      // Get token from localStorage
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        return { success: false, error: 'No token found' };
+      }
+      
+      // Validate token with our backend
+      const response = await fetch(`${config.apiBaseUrl}/auth/session`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      if (response.ok && data.success) {
+        return { 
+          success: true, 
+          session: data.session || { access_token: token } 
+        };
+      }
+      
+      // If session is invalid, clear token
+      localStorage.removeItem('auth_token');
+      return { success: false, error: 'Invalid or expired session' };
+    } catch (error) {
       console.error('Error getting session:', error);
-      return null;
+      return { success: false, error: error.message };
     }
-    return session;
+  }
+
+  /**
+   * Google sign in
+   * @param {string} redirectUrl - Optional URL to redirect to after sign-in
+   * @returns {Promise<Object>} - Sign in result with URL to redirect to
+   */
+  async googleSignIn(redirectUrl = null) {
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          redirectUrl: redirectUrl || window.location.origin 
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Google sign in failed');
+      }
+
+      return data; // contains { success: true, url: "..." }
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all requests for the current user
+   */
+  async getRequests() {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session?.access_token) {
+      throw new Error('Authentication required to get requests.');
+    }
+    const headers = {
+      'Authorization': `Bearer ${sessionResponse.session.access_token}`,
+      'Content-Type': 'application/json',
+    };
+    const response = await fetch(`${config.apiBaseUrl}/supabase/requests`, { headers });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error fetching requests: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get a specific request by ID
+   */
+  async getRequestById(id) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session?.access_token) {
+      throw new Error('Authentication required to get request by ID.');
+    }
+    const headers = {
+      'Authorization': `Bearer ${sessionResponse.session.access_token}`,
+      'Content-Type': 'application/json',
+    };
+    const response = await fetch(`${config.apiBaseUrl}/supabase/requests/${id}`, { headers });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error fetching request by ID: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Create a new request
+   */
+  async createRequest(requestData) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session?.access_token) {
+      throw new Error('Authentication required to create request.');
+    }
+    const headers = {
+      'Authorization': `Bearer ${sessionResponse.session.access_token}`,
+      'Content-Type': 'application/json',
+    };
+    const response = await fetch(`${config.apiBaseUrl}/supabase/requests`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestData),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error creating request: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Update an existing request
+   */
+  async updateRequest(id, updateData) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session?.access_token) {
+      throw new Error('Authentication required to update request.');
+    }
+    const headers = {
+      'Authorization': `Bearer ${sessionResponse.session.access_token}`,
+      'Content-Type': 'application/json',
+    };
+    const response = await fetch(`${config.apiBaseUrl}/supabase/requests/${id}`, {
+      method: 'PUT', // Typically PUT or PATCH for updates
+      headers,
+      body: JSON.stringify(updateData),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error updating request: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Delete a request (soft delete)
+   */
+  async deleteRequest(id) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session?.access_token) {
+      throw new Error('Authentication required to delete request.');
+    }
+    const headers = {
+      'Authorization': `Bearer ${sessionResponse.session.access_token}`,
+      'Content-Type': 'application/json',
+    };
+    const response = await fetch(`${config.apiBaseUrl}/supabase/requests/${id}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error deleting request: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Upload a file to storage
+   */
+  async uploadFile(file, requestId) {
+    const sessionResponse = await this.getSession();
+    if (!sessionResponse.success || !sessionResponse.session?.access_token) {
+      throw new Error('Authentication required to upload file.');
+    }
+    // For FormData, Content-Type is set by the browser. Do not set it manually.
+    const headers = {
+      'Authorization': `Bearer ${sessionResponse.session.access_token}`,
+    };
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('requestId', requestId);
+    
+    const response = await fetch(`${config.apiBaseUrl}/supabase/upload`, { // Ensure this endpoint is correct
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error uploading file: ${response.status}`);
+    }
+    return response.json();
   }
 }
 
-export default ApiClient; 
+export default new ApiClient(); 
