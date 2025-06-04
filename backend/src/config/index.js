@@ -21,6 +21,24 @@ const config = {
     basicVariantId: process.env.LEMONSQUEEZY_BASIC_VARIANT_ID || '',
     proVariantId: process.env.LEMONSQUEEZY_PRO_VARIANT_ID || '',
     premiumVariantId: process.env.LEMONSQUEEZY_PREMIUM_VARIANT_ID || '',
+    // Plans array for easy iteration and configuration
+    plans: [
+      {
+        variantId: process.env.LEMONSQUEEZY_BASIC_VARIANT_ID || '',
+        credits: 10,
+        name: 'Basic Plan'
+      },
+      {
+        variantId: process.env.LEMONSQUEEZY_PRO_VARIANT_ID || '',
+        credits: 50,
+        name: 'Pro Plan'
+      },
+      {
+        variantId: process.env.LEMONSQUEEZY_PREMIUM_VARIANT_ID || '',
+        credits: 100,
+        name: 'Premium Plan'
+      }
+    ]
   }
 };
 

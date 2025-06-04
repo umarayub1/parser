@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 
 /**
- * Dropdown button component for downloading data in JSON or CSV format
+ * Dropdown button component for downloading data in JSON, CSV, or Excel format
  * 
  * @param {Object} props - Component props
  * @param {Object} props.data - The data to be downloaded
@@ -232,6 +233,62 @@ const DownloadDataButton = ({ data, filename, buttonStyle, onError }) => {
     }
   };
 
+  const downloadExcel = () => {
+    if (!data) {
+      handleError("No data available to download.");
+      return;
+    }
+
+    try {
+      // Extract data
+      const metaData = data.meta_data || {};
+      const transactions = data.transactions_data || [];
+      const balances = data.balances || [];
+      
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Create metadata sheet
+      const metaDataArray = [['Key', 'Value']];
+      Object.entries(metaData).forEach(([key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          Object.entries(value).forEach(([subKey, subValue]) => {
+            metaDataArray.push([`${key} - ${subKey}`, subValue]);
+          });
+        } else {
+          metaDataArray.push([key, value]);
+        }
+      });
+      const metaDataSheet = XLSX.utils.aoa_to_sheet(metaDataArray);
+      XLSX.utils.book_append_sheet(wb, metaDataSheet, 'Meta Data');
+      
+      // Create balances sheet
+      const balancesArray = [['Date', 'Amount']];
+      balances.forEach(balance => {
+        const date = balance.date ? new Date(balance.date) : "";
+        balancesArray.push([date, balance.amount]);
+      });
+      const balancesSheet = XLSX.utils.aoa_to_sheet(balancesArray);
+      XLSX.utils.book_append_sheet(wb, balancesSheet, 'Balances');
+      
+      // Create transactions sheet
+      const transactionsArray = [['Date', 'Amount', 'Deposit', 'Description']];
+      transactions.forEach(transaction => {
+        const date = transaction.date ? new Date(transaction.date) : "";
+        const deposit = transaction.deposit ? "Yes" : "No";
+        transactionsArray.push([date, transaction.amount, deposit, transaction.description]);
+      });
+      const transactionsSheet = XLSX.utils.aoa_to_sheet(transactionsArray);
+      XLSX.utils.book_append_sheet(wb, transactionsSheet, 'Transactions');
+      
+      // Generate Excel file and trigger download
+      XLSX.writeFile(wb, `${filename || 'parsed_data'}.xlsx`);
+    } catch (error) {
+      console.error("Error creating Excel download:", error);
+      handleError("Could not generate Excel download.");
+    }
+  };
+
   return (
     <div className="dropdown-container" ref={dropdownRef} style={{ position: 'relative' }}>
       <button 
@@ -302,6 +359,23 @@ const DownloadDataButton = ({ data, filename, buttonStyle, onError }) => {
             }}
           >
             CSV (Separate Files)
+          </button>
+          <button 
+            onClick={() => {
+              downloadExcel();
+              setShowDropdown(false);
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            Excel
           </button>
         </div>
       )}

@@ -8,7 +8,11 @@
     "start": "node src/server.js",
     "backend-start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "subscription:test": "node src/test-subscription-system.js",
+    "subscription:migration": "node src/runMigration.js",
+    "subscription:monitor": "node -e \"import('./src/utils/subscriptionMonitoring.js').then(m => m.runHealthCheck().then(console.log))\"",
+    "subscription:retry-failed": "node src/test-webhooks/retry-failed-subscriptions.js"
   },
   "dependencies": {
     "@lemonsqueezy/lemonsqueezy.js": "^4.0.0",

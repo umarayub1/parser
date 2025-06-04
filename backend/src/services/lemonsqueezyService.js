@@ -10,13 +10,14 @@ lemonSqueezySetup({
 /**
  * Create a checkout for a subscription
  */
-export const createCheckoutSession = async (storeId, variantId, userId, userEmail, successUrl, cancelUrl) => {
+export const createCheckoutSession = async (storeId, variantId, userId, userEmail, successUrl, cancelUrl, checkoutReference) => {
   try {
     const response = await lsCreateCheckout(storeId, variantId, {
       checkoutData: {
         email: userEmail,
         custom: {
-          user_id: userId
+          user_id: userId,
+          checkout_reference: checkoutReference
         }
       },
       productOptions: {

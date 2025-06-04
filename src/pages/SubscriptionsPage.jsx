@@ -37,6 +37,20 @@ function SubscriptionsPage() {
           const subscription = await lemonsqueezyService.getSubscriptionStatus(user.id);
           setCurrentSubscription(subscription);
           
+          // Determine if current subscription is yearly
+          if (subscription?.lemonsqueezy_data?.attributes?.variant_name) {
+            const variantName = subscription.lemonsqueezy_data.attributes.variant_name;
+            if (variantName.toLowerCase().includes('year') || variantName.toLowerCase().includes('annual')) {
+              setBillingCycle('yearly');
+            }
+          } else {
+            // Restore user's billing cycle preference from local storage
+            const savedBillingCycle = localStorage.getItem('preferred_billing_cycle');
+            if (savedBillingCycle === 'yearly' || savedBillingCycle === 'monthly') {
+              setBillingCycle(savedBillingCycle);
+            }
+          }
+          
           setIsLoading(false);
         } catch (err) {
           console.error('Error fetching initial data:', err);
@@ -61,11 +75,27 @@ function SubscriptionsPage() {
     setSelectedPlan(plan);
 
     try {
+      // Determine which variant ID to use based on billing cycle
+      let variantId = plan.variantId; // Default to monthly variant
+      
+      // Check if yearly billing is selected and we have a yearly variant
+      if (billingCycle === 'yearly' && plan.yearlyVariantId) {
+        variantId = plan.yearlyVariantId;
+      } else if (billingCycle === 'yearly') {
+        // If yearly is selected but no yearly variant is defined, show error
+        setError('Yearly billing option is not available for this plan');
+        setIsLoading(false);
+        return;
+      }
+      
       // Call the service to initialize checkout
       const checkoutData = await lemonsqueezyService.initializeCheckout(
-        plan.variantId,
+        variantId,
         user.id
       );
+      
+      // Store billing cycle preference
+      localStorage.setItem('preferred_billing_cycle', billingCycle);
       
       // Redirect to LemonSqueezy checkout
       if (checkoutData.checkoutUrl) {

@@ -9,11 +9,16 @@ const supabase = createClient(
 
 /**
  * Store a webhook event in the database
+ * @param {string} eventName - The name of the event
+ * @param {object} eventData - The event data payload
+ * @param {boolean} processingFailed - Flag to indicate if processing failed
+ * @param {string} errorMessage - Error message if processing failed
  */
-export const storeWebhookEvent = async (eventName, eventData) => {
+export const storeWebhookEvent = async (eventName, eventData, processingFailed = false, errorMessage = null) => {
   try {
     // Extract lemonsqueezy_id based on the event type
     let lemonsqueezyId = null;
+    let userId = null;
     
     if (eventData.data) {
       if (eventName.includes('payment')) {
@@ -25,20 +30,32 @@ export const storeWebhookEvent = async (eventName, eventData) => {
       }
     }
     
+    // Try to extract user_id from custom_data
+    if (eventData.meta?.custom_data?.user_id) {
+      userId = eventData.meta.custom_data.user_id;
+    }
+    
     if (!lemonsqueezyId) {
       console.warn(`Could not extract lemonsqueezy_id from ${eventName} event`);
     }
     
+    // Generate unique event ID for de-duplication
+    const eventId = `${lemonsqueezyId || 'unknown'}-${eventName}-${Date.now()}`;
+    
     const { error } = await supabase
       .from('webhook_events')
       .upsert({
+        id: eventId,
         lemonsqueezy_id: lemonsqueezyId,
         event_name: eventName,
         event_data: eventData,
-        processed: false,
+        user_id: userId,
+        processed: !processingFailed,
+        processing_failed: processingFailed,
+        error_message: errorMessage,
         created_at: new Date().toISOString()
       }, {
-        onConflict: 'lemonsqueezy_id,event_name',
+        onConflict: 'id',
         ignoreDuplicates: false
       });
 
@@ -47,7 +64,7 @@ export const storeWebhookEvent = async (eventName, eventData) => {
       throw error;
     }
 
-    return { success: true };
+    return { success: true, eventId };
   } catch (error) {
     console.error('Error in storeWebhookEvent:', error);
     throw error;
@@ -83,32 +100,60 @@ export const updateSubscriptionStatus = async (lemonSqueezyId, status, data = {}
 /**
  * Create or update a subscription record
  */
-export const createSubscriptionRecord = async (userId, variantId, lemonSqueezyId, status, data = {}) => {
+export const createSubscriptionRecord = async (userId, variantId, lemonsqueezyId, status, data) => {
   try {
-    // Use upsert functionality (insert with on conflict)
-    const { error } = await supabase
+    // First, check if this subscription already exists
+    const { data: existingSubscription, error: checkError } = await supabase
       .from('subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          variant_id: variantId,
-          lemonsqueezy_id: lemonSqueezyId,
+      .select('*')
+      .eq('lemonsqueezy_id', lemonsqueezyId)
+      .maybeSingle();
+      
+    if (checkError) {
+      console.error('Error checking for existing subscription:', checkError);
+    }
+    
+    // If subscription exists, update it
+    if (existingSubscription) {
+      console.log(`Updating existing subscription: ${lemonsqueezyId}`);
+      
+      const { error: updateError } = await supabase
+        .from('subscriptions')
+        .update({
           status,
           lemonsqueezy_data: data,
           updated_at: new Date().toISOString()
-        },
-        {
-          onConflict: 'lemonsqueezy_id',
-          ignoreDuplicates: false
-        }
-      );
-
-    if (error) {
-      console.error('Error upserting subscription record:', error);
-      throw error;
+        })
+        .eq('lemonsqueezy_id', lemonsqueezyId);
+        
+      if (updateError) {
+        console.error('Error updating subscription record:', updateError);
+        throw updateError;
+      }
+      
+      return existingSubscription.id;
     }
-
-    return { success: true };
+    
+    // Otherwise create a new record
+    const { data: newSubscription, error: insertError } = await supabase
+      .from('subscriptions')
+      .insert({
+        user_id: userId,
+        variant_id: variantId,
+        lemonsqueezy_id: lemonsqueezyId,
+        status,
+        lemonsqueezy_data: data,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+      
+    if (insertError) {
+      console.error('Error creating subscription record:', insertError);
+      throw insertError;
+    }
+    
+    return newSubscription.id;
   } catch (error) {
     console.error('Error in createSubscriptionRecord:', error);
     throw error;
@@ -122,7 +167,7 @@ export const getUserCredits = async (userId) => {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('credits')
+      .select('credits_remaining')
       .eq('id', userId)
       .single();
 
@@ -131,7 +176,7 @@ export const getUserCredits = async (userId) => {
       throw error;
     }
 
-    return data.credits || 0;
+    return data?.credits_remaining || 0;
   } catch (error) {
     console.error('Error in getUserCredits:', error);
     throw error;
@@ -150,7 +195,7 @@ export const addCreditsToUser = async (userId, creditsToAdd) => {
     const { error } = await supabase
       .from('profiles')
       .update({
-        credits: currentCredits + creditsToAdd
+        credits_remaining: currentCredits + creditsToAdd
       })
       .eq('id', userId);
 
@@ -170,7 +215,14 @@ export const addCreditsToUser = async (userId, creditsToAdd) => {
  * Get credits for a subscription variant
  */
 export const getCreditsForVariant = async (variantId) => {
-  // Return credits based on variant ID from config
+  // Find the plan in config
+  for (const plan of config.lemonSqueezy.plans) {
+    if (plan.variantId === variantId) {
+      return plan.credits;
+    }
+  }
+  
+  // Fallback to hardcoded values if plan not found in config
   if (variantId === config.lemonSqueezy.basicVariantId) {
     return 10; // Basic plan: 10 credits
   } else if (variantId === config.lemonSqueezy.proVariantId) {
@@ -179,5 +231,45 @@ export const getCreditsForVariant = async (variantId) => {
     return 150; // Premium plan: 150 credits
   }
   
+  console.warn(`No credit allocation found for variant ID: ${variantId}`);
   return 0; // Default: 0 credits
-}; 
+};
+
+/**
+ * Ensure the credit_transactions table exists
+ */
+export const ensureCreditTransactionsTable = async () => {
+  try {
+    // Check if the table exists by querying it
+    const { error } = await supabase
+      .from('credit_transactions')
+      .select('id')
+      .limit(1);
+    
+    // If there's an error with "relation credit_transactions does not exist", create the table
+    if (error && error.message && error.message.includes('relation "credit_transactions" does not exist')) {
+      console.log('Creating credit_transactions table...');
+      
+      // Create the table using SQL - need to use service role key for this
+      const { error: createError } = await supabase.rpc('create_credit_transactions_table');
+      
+      if (createError) {
+        // If RPC fails, log error but don't halt application
+        console.error('Error creating credit_transactions table:', createError);
+      } else {
+        console.log('credit_transactions table created successfully');
+      }
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error in ensureCreditTransactionsTable:', error);
+    return { success: false, error };
+  }
+};
+
+// Call this on application startup
+ensureCreditTransactionsTable().catch(err => {
+  console.error('Failed to ensure credit_transactions table:', err);
+  // Non-fatal error, continue application startup
+}); 

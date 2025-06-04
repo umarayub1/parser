@@ -9,6 +9,7 @@ import authRoutes from './routes/authRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import { handleLemonSqueezyWebhook } from './controllers/subscriptionController.js';
 import getRawBody from 'raw-body';
+import { runHealthCheck } from './utils/subscriptionMonitoring.js';
 
 // Initialize Express app
 const app = express();
@@ -75,6 +76,29 @@ app.use((err, req, res, next) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Set up subscription health monitoring
+  // Run health check on startup
+  runHealthCheck()
+    .then(health => {
+      if (health.healthy) {
+        console.log('Subscription system health check passed');
+      } else {
+        console.warn('Subscription system health issues detected:', health.issues.length);
+      }
+    })
+    .catch(err => console.error('Failed to run initial health check:', err));
+  
+  // Schedule periodic health checks (every 30 minutes)
+  setInterval(() => {
+    runHealthCheck()
+      .then(health => {
+        if (!health.healthy) {
+          console.error(`Subscription health check failed: ${health.issues.length} issues found`);
+        }
+      })
+      .catch(err => console.error('Periodic health check failed:', err));
+  }, 30 * 60 * 1000); // 30 minutes
 });
 
 export default app;
