@@ -93,7 +93,7 @@ export const createCheckout = async (req, res) => {
 };
 
 /**
- * Get subscription status for a user
+ * Get subscription status for a user - only returns active subscriptions
  */
 export const getSubscriptionStatus = async (req, res) => {
   try {
@@ -106,15 +106,27 @@ export const getSubscriptionStatus = async (req, res) => {
       });
     }
 
-
-    // Fetch subscription from database first
+    // Fetch only active subscriptions from database first
     const { data: localSubscription, error: localError } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
+      .in('status', ['active', 'on_trial', 'past_due'])
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
+
+    // If no active subscription found, return null
+    if (localError && localError.code !== 'PGRST116') {
+      throw localError;
+    }
+
+    if (!localSubscription) {
+      return res.status(200).json({
+        success: true,
+        subscription: null
+      });
+    }
 
     // If we have a local subscription with a Lemon Squeezy ID, get latest data
     let subscriptionData = localSubscription;
@@ -127,23 +139,32 @@ export const getSubscriptionStatus = async (req, res) => {
         // Update local record with latest status
         if (lemonSqueezyData) {
           const lsStatus = lemonSqueezyData.data.attributes.status;
-            
+          
+          // Only return subscription if it's still active in Lemon Squeezy
+          if (['active', 'on_trial', 'past_due'].includes(lsStatus)) {
             // Update our local reference
             subscriptionData = {
               ...localSubscription,
               status: lsStatus,
               lemonsqueezy_data: lemonSqueezyData.data
+            };
+          } else {
+            // Subscription is no longer active, return null
+            return res.status(200).json({
+              success: true,
+              subscription: null
+            });
           }
         }
       } catch (error) {
         console.error('Error getting updated subscription data:', error);
-        // Continue with local data
+        // Continue with local data if it's still considered active
       }
     }
 
     return res.status(200).json({
       success: true,
-      subscription: subscriptionData || null
+      subscription: subscriptionData
     });
     
   } catch (error) {

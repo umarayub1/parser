@@ -66,11 +66,8 @@ const Header = ({ mobileNavOpen, setMobileNavOpen }) => {
     if (path === '/') {
       return location.pathname === '/';
     }
-    if (path === '/new-request') {
-      return location.pathname === '/new-request';
-    }
-    if (path === '/history') {
-      return location.pathname === '/history';
+    if (path === '/requests') {
+      return location.pathname === '/requests';
     }
     if (path === '/subscriptions') {
       return location.pathname === '/subscriptions';
@@ -107,21 +104,14 @@ const Header = ({ mobileNavOpen, setMobileNavOpen }) => {
           <div className="header-controls">
             {user && (
               <div className="nav-links">
-                <Link to="/new-request" className={`nav-link ${isActive('/new-request') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                  <span className="nav-text">New Request</span>
-                </Link>
-                <Link to="/history" className={`nav-link ${isActive('/history') ? 'active' : ''}`}>
+                <Link to="/requests" className={`nav-link ${isActive('/requests') ? 'active' : ''}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                     <line x1="16" y1="2" x2="16" y2="6"></line>
                     <line x1="8" y1="2" x2="8" y2="6"></line>
                     <line x1="3" y1="10" x2="21" y2="10"></line>
                   </svg>
-                  <span className="nav-text">History</span>
+                  <span className="nav-text">Requests</span>
                 </Link>
                 <Link to="/subscriptions" className={`nav-link ${isActive('/subscriptions') ? 'active' : ''}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -261,22 +251,14 @@ const Header = ({ mobileNavOpen, setMobileNavOpen }) => {
         )}
         
         <div className="mobile-nav-links">
-          <Link to="/new-request" className={`mobile-nav-link ${isActive('/new-request') ? 'active' : ''}`} onClick={toggleMobileNav}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            New Request
-          </Link>
-          
-          <Link to="/history" className={`mobile-nav-link ${isActive('/history') ? 'active' : ''}`} onClick={toggleMobileNav}>
+          <Link to="/requests" className={`mobile-nav-link ${isActive('/requests') ? 'active' : ''}`} onClick={toggleMobileNav}>
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
               <line x1="16" y1="2" x2="16" y2="6"></line>
               <line x1="8" y1="2" x2="8" y2="6"></line>
               <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
-            History
+            Requests
           </Link>
           
           <Link to="/subscriptions" className={`mobile-nav-link ${isActive('/subscriptions') ? 'active' : ''}`} onClick={toggleMobileNav}>

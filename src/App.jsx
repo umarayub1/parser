@@ -10,7 +10,6 @@ import PrivateRoute from './components/auth/PrivateRoute';
 import SessionManager from './components/auth/SessionManager';
 
 // Import pages
-import NewRequestPage from './pages/NewRequestPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
 import ProfilePage from './pages/ProfilePage';
 import ContactPage from './pages/ContactPage';
@@ -19,7 +18,7 @@ import SignupPage from './pages/SignupPage';
 import ApiDocsPage from './pages/ApiDocsPage';
 import ApiExamplesPage from './pages/ApiExamplesPage';
 import LandingPage from './pages/LandingPage';
-import HistoryPage from './pages/HistoryPage';
+import RequestsPage from './pages/RequestsPage';
 import RequestPage from '../src/components/RequestPage';
 
 // Import Redux selectors
@@ -61,10 +60,9 @@ function App() {
           <Routes>
             <Route 
               path="/" 
-              element={<Navigate to="/new-request" replace />} 
+              element={<Navigate to="/requests" replace />} 
             />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/new-request" element={<NewRequestPage />} />
+            <Route path="/requests" element={<RequestsPage />} />
             <Route path="/subscriptions" element={<SubscriptionsPage />} />
             <Route path="/top-up" element={<Navigate to="/subscriptions" replace />} />
             <Route path="/requests/:id" element={<RequestPage />} />
@@ -72,8 +70,8 @@ function App() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/api-docs" element={<ApiDocsPage />} />
             <Route path="/api-examples" element={<ApiExamplesPage />} />
-            <Route path="/login" element={<Navigate to="/new-request" replace />} />
-            <Route path="/signup" element={<Navigate to="/new-request" replace />} />
+            <Route path="/login" element={<Navigate to="/requests" replace />} />
+            <Route path="/signup" element={<Navigate to="/requests" replace />} />
           </Routes>
         )}
       </main>

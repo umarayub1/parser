@@ -38,7 +38,12 @@ app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy' });
+  res.status(200).json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 // API Routes
@@ -74,30 +79,32 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Health check available at http://localhost:${PORT}/health`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   
   // Set up subscription health monitoring
   // Run health check on startup
   runHealthCheck()
     .then(health => {
       if (health.healthy) {
-        console.log('Subscription system health check passed');
+        console.log('✅ Subscription system health check passed');
       } else {
-        console.warn('Subscription system health issues detected:', health.issues.length);
+        console.warn(`⚠️  Subscription system health issues detected: ${health.issues.length}`);
       }
     })
-    .catch(err => console.error('Failed to run initial health check:', err));
+    .catch(err => console.error('❌ Failed to run initial health check:', err));
   
   // Schedule periodic health checks (every 30 minutes)
   setInterval(() => {
     runHealthCheck()
       .then(health => {
         if (!health.healthy) {
-          console.error(`Subscription health check failed: ${health.issues.length} issues found`);
+          console.error(`❌ Subscription health check failed: ${health.issues.length} issues found`);
         }
       })
-      .catch(err => console.error('Periodic health check failed:', err));
+      .catch(err => console.error('❌ Periodic health check failed:', err));
   }, 30 * 60 * 1000); // 30 minutes
 });
 

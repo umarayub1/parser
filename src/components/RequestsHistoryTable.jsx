@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient'; // Import supabase client
+import ApiClient from './ApiClient';
+import * as XLSX from 'xlsx';
 import './RequestsHistoryTable.css'; // Import the CSS styles
 
 // Helper function to format date (optional)
@@ -83,16 +85,39 @@ const StatusBadge = ({ status }) => {
 function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 20;
-  const [deletingId, setDeletingId] = useState(null);
+  const rowsPerPage = 100;
+
   const [error, setError] = useState('');
+  const [selectedRequests, setSelectedRequests] = useState(new Set());
+  const [isExporting, setIsExporting] = useState(false);
 
   if (isLoading) {
-    return <p className="history-loading">Loading history...</p>;
+    return (
+      <div className="history-loading-container">
+        <div className="loading-spinner">
+          <div className="spinner-ring"></div>
+        </div>
+        <p className="loading-text">Loading your request history...</p>
+      </div>
+    );
   }
 
   if (!requests || requests.length === 0) {
-    return <p className="history-empty">No request history found.</p>;
+    return (
+      <div className="history-empty-container">
+        <div className="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        </div>
+        <h3>No requests yet</h3>
+        <p>You haven't submitted any bank statement parsing requests yet. Click the "New Request" button above to upload your first PDF statement and get started.</p>
+      </div>
+    );
   }
 
   const handleRowClick = (requestId, e) => {
@@ -105,40 +130,220 @@ function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
   };
 
   // Handle soft delete
-  const handleDelete = async (e, requestId) => {
-    e.stopPropagation(); // Prevent row click event
-    
-    if (window.confirm('Are you sure you want to delete this request? This action cannot be undone.')) {
-      try {
-        setDeletingId(requestId);
-        setError('');
-        
-        // Perform soft delete by updating is_deleted flag
-        const { error: deleteError } = await supabase
-          .from('requests')
-          .update({ is_deleted: true })
-          .eq('id', requestId);
-          
-        if (deleteError) throw deleteError;
-        
-        // If onRequestUpdate callback exists, call it to refresh the list
-        if (typeof onRequestUpdate === 'function') {
-          onRequestUpdate();
-        } else {
-          // Otherwise, filter out the deleted request locally
-          const updatedRequests = requests.filter(req => req.id !== requestId);
-          // The component will re-render with filtered requests
-        }
-        
-        console.log(`Request ${requestId} soft-deleted successfully`);
-      } catch (err) {
-        console.error(`Error soft-deleting request ${requestId}:`, err);
-        setError(`Failed to delete: ${err.message}`);
-      } finally {
-        setDeletingId(null);
-      }
+  // Handle checkbox selection
+  const handleSelectRequest = (requestId, isChecked) => {
+    const newSelected = new Set(selectedRequests);
+    if (isChecked) {
+      newSelected.add(requestId);
+    } else {
+      newSelected.delete(requestId);
+    }
+    setSelectedRequests(newSelected);
+  };
+
+  // Handle select all checkbox
+  const handleSelectAll = (isChecked) => {
+    if (isChecked) {
+      // Select all requests (not just successful ones for deletion)
+      setSelectedRequests(new Set(requests.map(req => req.id)));
+    } else {
+      setSelectedRequests(new Set());
     }
   };
+
+  // Export selected requests to Excel files
+  const handleBulkExport = async () => {
+    const selectedRequestsArray = Array.from(selectedRequests);
+    
+    // Filter only successful requests for export
+    const successfulSelectedRequests = selectedRequestsArray.filter(requestId => {
+      const request = requests.find(req => req.id === requestId);
+      return request && request.parsing_status?.toLowerCase() === 'success';
+    });
+
+    if (successfulSelectedRequests.length === 0) {
+      setError('Please select at least one successfully parsed request to export.');
+      return;
+    }
+
+    setIsExporting(true);
+    setError('');
+
+    try {
+      const exportPromises = successfulSelectedRequests.map(async (requestId) => {
+        try {
+          const response = await ApiClient.getRequestById(requestId);
+          if (response.success && response.data) {
+            const request = response.data;
+            const parsedData = request.parsed_data;
+            
+            if (!parsedData) {
+              console.warn(`No parsed data found for request ${requestId}`);
+              return null;
+            }
+
+            // Create Excel workbook for this request
+            const wb = XLSX.utils.book_new();
+            
+            // Extract data
+            const metaData = parsedData.meta_data || {};
+            const transactions = parsedData.transactions_data || [];
+            const balances = parsedData.balances || [];
+            
+            // Create metadata sheet
+            const metaDataArray = [['Key', 'Value']];
+            Object.entries(metaData).forEach(([key, value]) => {
+              if (typeof value === 'object' && value !== null) {
+                Object.entries(value).forEach(([subKey, subValue]) => {
+                  metaDataArray.push([`${key} - ${subKey}`, subValue]);
+                });
+              } else {
+                metaDataArray.push([key, value]);
+              }
+            });
+            const metaDataSheet = XLSX.utils.aoa_to_sheet(metaDataArray);
+            XLSX.utils.book_append_sheet(wb, metaDataSheet, 'Meta Data');
+            
+            // Create balances sheet
+            const balancesArray = [['Date', 'Amount']];
+            balances.forEach(balance => {
+              const date = balance.date ? new Date(balance.date) : "";
+              balancesArray.push([date, balance.amount]);
+            });
+            const balancesSheet = XLSX.utils.aoa_to_sheet(balancesArray);
+            XLSX.utils.book_append_sheet(wb, balancesSheet, 'Balances');
+            
+            // Create transactions sheet
+            const transactionsArray = [['Date', 'Amount', 'Deposit', 'Description']];
+            transactions.forEach(transaction => {
+              const date = transaction.date ? new Date(transaction.date) : "";
+              const deposit = transaction.deposit ? "Yes" : "No";
+              transactionsArray.push([date, transaction.amount, deposit, transaction.description]);
+            });
+            const transactionsSheet = XLSX.utils.aoa_to_sheet(transactionsArray);
+            XLSX.utils.book_append_sheet(wb, transactionsSheet, 'Transactions');
+            
+            // Generate filename from request file name
+            const baseFilename = request.file_name ? 
+              request.file_name.replace(/\.pdf$/i, '') : 
+              `request_${requestId}`;
+            
+            // Generate Excel file and trigger download
+            XLSX.writeFile(wb, `${baseFilename}_parsed_data.xlsx`);
+            
+            return { success: true, filename: baseFilename };
+          } else {
+            console.warn(`Failed to fetch data for request ${requestId}`);
+            return { success: false, requestId, error: 'Failed to fetch data' };
+          }
+        } catch (error) {
+          console.error(`Error exporting request ${requestId}:`, error);
+          return { success: false, requestId, error: error.message };
+        }
+      });
+
+      // Execute all exports with a small delay between each to prevent browser blocking
+      const results = [];
+      for (let i = 0; i < exportPromises.length; i++) {
+        const result = await exportPromises[i];
+        results.push(result);
+        
+        // Add a small delay between downloads to prevent browser blocking
+        if (i < exportPromises.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      // Check results and show summary
+      const successful = results.filter(r => r && r.success).length;
+      const failed = results.filter(r => r && !r.success).length;
+      
+      if (successful > 0) {
+        console.log(`Successfully exported ${successful} files`);
+      }
+      
+      if (failed > 0) {
+        setError(`${failed} exports failed. Check console for details.`);
+      }
+
+      // Clear selection after export
+      setSelectedRequests(new Set());
+
+    } catch (error) {
+      console.error('Bulk export error:', error);
+      setError(`Export failed: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Bulk delete selected requests
+  const handleBulkDelete = async () => {
+    if (selectedRequests.size === 0) {
+      setError('Please select at least one request to delete.');
+      return;
+    }
+
+    const selectedCount = selectedRequests.size;
+    const confirmMessage = `Are you sure you want to delete ${selectedCount} request${selectedCount !== 1 ? 's' : ''}? This action cannot be undone.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsExporting(true); // Reuse the same loading state
+    setError('');
+
+    try {
+      const selectedRequestsArray = Array.from(selectedRequests);
+      const deletePromises = selectedRequestsArray.map(async (requestId) => {
+        try {
+          const { error: deleteError } = await supabase
+            .from('requests')
+            .update({ is_deleted: true })
+            .eq('id', requestId);
+            
+          if (deleteError) throw deleteError;
+          
+          return { success: true, requestId };
+        } catch (error) {
+          console.error(`Error deleting request ${requestId}:`, error);
+          return { success: false, requestId, error: error.message };
+        }
+      });
+
+      // Execute all deletions
+      const results = await Promise.all(deletePromises);
+
+      // Check results and show summary
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+      
+      if (successful > 0) {
+        console.log(`Successfully deleted ${successful} requests`);
+        
+        // Refresh the list to show updated data
+        if (typeof onRequestUpdate === 'function') {
+          onRequestUpdate();
+        }
+      }
+      
+      if (failed > 0) {
+        setError(`${failed} deletions failed. Check console for details.`);
+      }
+
+      // Clear selection after deletion
+      setSelectedRequests(new Set());
+
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      setError(`Delete failed: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+
 
   // Pagination logic
   const totalPages = Math.ceil(requests.length / rowsPerPage);
@@ -158,63 +363,141 @@ function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
     }
   };
 
-  // Delete button with trash icon
-  const DeleteButton = ({ requestId }) => (
-    <button 
-      className={`delete-button ${deletingId === requestId ? 'deleting' : ''}`}
-      onClick={(e) => handleDelete(e, requestId)}
-      disabled={deletingId === requestId}
-      title="Delete request"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="3 6 5 6 21 6"></polyline>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        <line x1="10" y1="11" x2="10" y2="17"></line>
-        <line x1="14" y1="11" x2="14" y2="17"></line>
-      </svg>
-      {deletingId === requestId && <span className="delete-spinner"></span>}
-    </button>
-  );
+
+
+  // Get all requests for selection (both successful and others)
+  const allSelected = requests.length > 0 && 
+    requests.every(req => selectedRequests.has(req.id));
+
+  // Count successful requests in selection for export
+  const selectedSuccessfulCount = Array.from(selectedRequests).filter(requestId => {
+    const request = requests.find(req => req.id === requestId);
+    return request && request.parsing_status?.toLowerCase() === 'success';
+  }).length;
 
   return (
     <div className="history-table-container">
-      <h2>History</h2>
       {error && <div className="history-error">{error}</div>}
+      
+      {/* Bulk Action Controls */}
+      {requests.length > 0 && (
+        <div className="bulk-action-controls">
+          <div className="bulk-select-info">
+            {selectedRequests.size > 0 && (
+              <span className="selected-count">
+                {selectedRequests.size} request{selectedRequests.size !== 1 ? 's' : ''} selected
+                {selectedSuccessfulCount > 0 && selectedSuccessfulCount !== selectedRequests.size && (
+                  <span className="successful-count"> ({selectedSuccessfulCount} exportable)</span>
+                )}
+              </span>
+            )}
+          </div>
+          <div className="bulk-action-buttons">
+            <button
+              className={`bulk-export-button ${selectedSuccessfulCount === 0 ? 'disabled' : ''}`}
+              onClick={handleBulkExport}
+              disabled={selectedSuccessfulCount === 0 || isExporting}
+              title={selectedSuccessfulCount === 0 ? 'Select successfully parsed requests to export' : `Export ${selectedSuccessfulCount} request${selectedSuccessfulCount !== 1 ? 's' : ''} to Excel`}
+            >
+              {isExporting ? (
+                <>
+                  <div className="action-spinner"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  Export to Excel
+                </>
+              )}
+            </button>
+            <button
+              className={`bulk-delete-button ${selectedRequests.size === 0 ? 'disabled' : ''}`}
+              onClick={handleBulkDelete}
+              disabled={selectedRequests.size === 0 || isExporting}
+              title={selectedRequests.size === 0 ? 'Select requests to delete' : `Delete ${selectedRequests.size} request${selectedRequests.size !== 1 ? 's' : ''}`}
+            >
+              {isExporting ? (
+                <>
+                  <div className="action-spinner"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                  Delete Selected
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="history-table-wrapper">
         <table className="history-table">
           <thead className="history-table-head">
             <tr>
+              {requests.length > 0 && (
+                <th className="history-table-header select-column">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    title="Select all requests"
+                  />
+                </th>
+              )}
               <th className="history-table-header">File Name</th>
               <th className="history-table-header">Created At</th>
               <th className="history-table-header pages-column">Pages</th>
               <th className="history-table-header status-column">Parsing Status</th>
               <th className="history-table-header offset-column">Balance Offset</th>
-              <th className="history-table-header actions-column">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {currentRequests.map((req) => (
-              <tr
-                key={req.id}
-                onClick={(e) => handleRowClick(req.id, e)}
-                className="history-table-row"
-              >
-                <td className="history-table-cell" data-label="File Name">{req.file_name || 'N/A'}</td>
-                <td className="history-table-cell" data-label="Created At">{formatDate(req.created_at)}</td>
-                <td className="history-table-cell pages-column" data-label="Pages">{req.page_count ?? 'N/A'}</td>
-                <td className="history-table-cell status-column" data-label="Parsing Status">
-                  <StatusBadge status={req.parsing_status} />
-                </td>
-                <td className="history-table-cell offset-column" data-label="Balance Offset">
-                  {req.parsed_data?.meta_data?.["Ending Balance Offset"]}
-                </td>
-                <td className="history-table-cell actions-column" data-label="Actions">
-                  <div className="delete-button-container">
-                    <DeleteButton requestId={req.id} />
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {currentRequests.map((req) => {
+              const isSelected = selectedRequests.has(req.id);
+              
+              return (
+                <tr
+                  key={req.id}
+                  onClick={(e) => handleRowClick(req.id, e)}
+                  className="history-table-row"
+                >
+                  {requests.length > 0 && (
+                    <td className="history-table-cell select-column" data-label="Select">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleSelectRequest(req.id, e.target.checked);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </td>
+                  )}
+                  <td className="history-table-cell" data-label="File Name">{req.file_name || 'N/A'}</td>
+                  <td className="history-table-cell" data-label="Created At">{formatDate(req.created_at)}</td>
+                  <td className="history-table-cell pages-column" data-label="Pages">{req.page_count ?? 'N/A'}</td>
+                  <td className="history-table-cell status-column" data-label="Parsing Status">
+                    <StatusBadge status={req.parsing_status} />
+                  </td>
+                  <td className="history-table-cell offset-column" data-label="Balance Offset">
+                    {req.parsed_data?.meta_data?.["Ending Balance Offset"]}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

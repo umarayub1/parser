@@ -18,13 +18,16 @@ export async function getUserFromSession(sessionToken) {
       return { user: null, session: null };
     }
     
-    // Get session data
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Create a session object with the token for stateless operation
+    // In serverless environments, we need to reconstruct the session from the token
+    const session = {
+      access_token: sessionToken,
+      user: user,
+      expires_at: user.exp ? user.exp * 1000 : Date.now() + (24 * 60 * 60 * 1000), // Default to 24 hours if no exp
+      token_type: 'bearer'
+    };
     
-    if (sessionError) {
-      console.error('Error getting session:', sessionError);
-      return { user, session: null };
-    }
+    console.log('Session reconstructed for user:', user.id, 'expires at:', new Date(session.expires_at));
     
     return { user, session };
   } catch (error) {

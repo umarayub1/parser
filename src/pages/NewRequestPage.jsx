@@ -309,6 +309,9 @@ function NewRequestPage() {
 
   // --- File Handling ---
   const handleFileChange = async (event) => {
+     // Prevent default behavior and store current scroll position
+     const currentScrollY = window.scrollY;
+     
      const selectedFile = event.target.files?.[0];
 
      // Revoke previous URL FIRST
@@ -368,6 +371,11 @@ function NewRequestPage() {
     } else { // No file selected
       setFile(null); setPageCount(0); // Already revoked URL above
     }
+    
+    // Restore scroll position after state updates to prevent unwanted scrolling
+    setTimeout(() => {
+      window.scrollTo(0, currentScrollY);
+    }, 0);
   };
 
   // --- Trigger Parsing (Upload -> Invoke Function) ---
@@ -582,7 +590,7 @@ function NewRequestPage() {
                id="file-upload" // Added ID for label association
                onChange={handleFileChange}
                accept=".pdf"
-               disabled={isLoading || (!!currentRequestId && parsingStatus !== 'pending' && parsingStatus !== 'error')}
+               disabled={isLoading || (!!currentRequestId && parsingStatus !== 'pending' && parsingStatus !== 'error' && parsingStatus !== 'success')}
                style={{ display: 'none' }} // Hide the default input
              />
              {/* Styled label acting as the button */}
@@ -590,31 +598,86 @@ function NewRequestPage() {
                <label
                  htmlFor="file-upload"
                  className={`cta-button ${isLoading ? 'disabled' : ''}`}
-                 style={{ fontSize: '1rem' }}
+                 style={{ fontSize: '1rem', padding: '12px 24px', display: 'inline-block', textAlign: 'center' }}
                >
                  Choose PDF File
                </label>
              ) : (
                <>
-                 {/* Keep consistent button size, but with action appropriate for state */}
-                 {user && !isLoading && (!parsingStatus || parsingStatus === 'pending' || parsingStatus === 'error') ? (
-                   <button 
-                     onClick={triggerParsing} 
-                     disabled={pageCount === 0 || userCredits < (pageCount * 0.1)} 
-                     className="cta-button"
-                     style={{width: '150px', fontSize: '1rem'}} // Fixed width for consistency
-                   >
-                     {parsingStatus === 'error' ? 'Retry Parsing' : 'Start Parsing'}
-                   </button>
-                 ) : (
-                   <button 
-                     className="cta-button" 
-                     disabled={true}
-                     style={{width: '150px', fontSize: '1rem'}} // Fixed width for consistency
-                   >
-                     Processing...
-                   </button>
-                 )}
+                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                   {/* Keep consistent button size, but with action appropriate for state */}
+                   {user && !isLoading && (!parsingStatus || parsingStatus === 'pending' || parsingStatus === 'error' || parsingStatus === 'success') ? (
+                     <button 
+                       onClick={parsingStatus === 'success' ? resetState : triggerParsing} 
+                       disabled={parsingStatus !== 'success' && (pageCount === 0 || userCredits < (pageCount * 0.1))} 
+                       className="cta-button"
+                       style={{fontSize: '1rem', padding: '12px 24px'}} // Natural button sizing
+                     >
+                       {parsingStatus === 'error' ? 'Retry Parsing' : 
+                        parsingStatus === 'success' ? 'New Request' : 'Start Parsing'}
+                     </button>
+                   ) : (
+                     <button 
+                       className="cta-button" 
+                       disabled={true}
+                       style={{fontSize: '1rem', padding: '12px 24px'}} // Natural button sizing
+                     >
+                       Processing...
+                     </button>
+                   )}
+                   
+                   {/* Subtle Cancel/Remove File Button - only show when not processing and not successful */}
+                   {!isLoading && parsingStatus !== 'success' && (
+                     <button 
+                       onClick={() => {
+                         // Clear the current file and reset state
+                         if (filePreviewUrl) {
+                           URL.revokeObjectURL(filePreviewUrl);
+                           setFilePreviewUrl(null);
+                         }
+                         setFile(null);
+                         setPageCount(0);
+                         setParsedData(null);
+                         setParsingStatus('');
+                         setCurrentRequestId(null);
+                         setError('');
+                         
+                         // Clear the file input
+                         const fileInput = document.getElementById('file-upload');
+                         if (fileInput) fileInput.value = '';
+                       }}
+                       title="Remove file and choose a different one"
+                       style={{
+                         width: '32px',
+                         height: '32px',
+                         borderRadius: '50%',
+                         border: 'none',
+                         backgroundColor: 'transparent',
+                         color: '#dc3545',
+                         cursor: 'pointer',
+                         display: 'flex',
+                         alignItems: 'center',
+                         justifyContent: 'center',
+                         fontSize: '18px',
+                         fontWeight: 'bold',
+                         transition: 'all 0.2s ease',
+                         marginLeft: '5px'
+                       }}
+                       onMouseOver={(e) => {
+                         e.target.style.backgroundColor = '#dc3545';
+                         e.target.style.color = 'white';
+                         e.target.style.transform = 'scale(1.1)';
+                       }}
+                       onMouseOut={(e) => {
+                         e.target.style.backgroundColor = 'transparent';
+                         e.target.style.color = '#dc3545';
+                         e.target.style.transform = 'scale(1)';
+                       }}
+                     >
+                       ×
+                     </button>
+                   )}
+                 </div>
                  
                  {/* Show file information separately */}
                  <div className="file-info" style={{marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '5px', display: 'flex', alignItems: 'center'}}>

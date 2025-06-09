@@ -5,7 +5,9 @@ import {
   selectUser,
   selectSession,
   selectAuthLoading,
-  selectAuthError
+  selectAuthError,
+  setSession,
+  setUser
 } from '../../store/authSlice';
 
 // Add a timeout value to control how often we check sessions
@@ -62,8 +64,14 @@ const SessionManager = () => {
   useEffect(() => {
     if (authError) {
       console.error(`Authentication Error: ${authError}`);
+      
+      // If the error indicates token expiration or invalid session, clear the Redux state
+      if (authError.includes('expired') || authError.includes('Invalid or expired session')) {
+        dispatch(setSession(null));
+        dispatch(setUser(null));
+      }
     }
-  }, [authError]);
+  }, [authError, dispatch]);
 
   // This component doesn't render anything
   return null;

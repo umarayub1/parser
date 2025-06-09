@@ -124,10 +124,7 @@ class ApiClient {
         }
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get user profile');
-      }
+      const data = await this.handleApiResponse(response);
 
       return data.user;
     } catch (error) {
@@ -184,10 +181,7 @@ class ApiClient {
         }
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get credits');
-      }
+      const data = await this.handleApiResponse(response);
 
       // Update cache
       apiCache.credits.value = data.credits;
@@ -485,6 +479,66 @@ class ApiClient {
   }
 
   /**
+   * Check if a JWT token is expired
+   * @param {string} token - JWT token to check
+   * @returns {boolean} - True if token is expired
+   */
+  isTokenExpired(token) {
+    if (!token) return true;
+    
+    try {
+      // JWT tokens have 3 parts separated by dots
+      const parts = token.split('.');
+      if (parts.length !== 3) return true;
+      
+      // Decode the payload (second part)
+      const payload = JSON.parse(atob(parts[1]));
+      
+      // Check if token has expiration time
+      if (!payload.exp) return false; // If no exp claim, assume it doesn't expire
+      
+      // Check if current time is past expiration (exp is in seconds, Date.now() is in milliseconds)
+      const currentTime = Math.floor(Date.now() / 1000);
+      return currentTime >= payload.exp;
+    } catch (error) {
+      console.error('Error checking token expiration:', error);
+      return true; // If we can't parse it, assume it's expired
+    }
+  }
+
+  /**
+   * Handle API response and check for authentication errors
+   * @param {Response} response - Fetch response object
+   * @returns {Promise<Object>} - Parsed response data
+   */
+  async handleApiResponse(response) {
+    const data = await response.json();
+    
+    // If we get a 401 (Unauthorized), the token is likely expired
+    if (response.status === 401) {
+      console.log('ApiClient: Received 401 response, clearing token and redirecting to login');
+      localStorage.removeItem('auth_token');
+      
+      // If we're in a browser environment, redirect to login
+      if (typeof window !== 'undefined' && window.location) {
+        // Only redirect if we're not already on the login page
+        if (!window.location.pathname.includes('/login')) {
+          console.log('ApiClient: Redirecting to login page');
+          window.location.href = '/login';
+        }
+      }
+      
+      throw new Error('Session expired. Please log in again.');
+    }
+    
+    if (!response.ok) {
+      throw new Error(data.error || `API error: ${response.status}`);
+    }
+    
+    return data;
+  }
+
+  /**
    * Get current session
    * @returns {Promise<Object|null>} - Session object or null if not authenticated
    */
@@ -495,6 +549,13 @@ class ApiClient {
       
       if (!token) {
         return { success: false, error: 'No token found' };
+      }
+      
+      // Check if token is expired before making API call
+      if (this.isTokenExpired(token)) {
+        console.log('ApiClient: Token expired, removing from localStorage');
+        localStorage.removeItem('auth_token');
+        return { success: false, error: 'Token expired' };
       }
       
       // Check cache first
@@ -543,9 +604,17 @@ class ApiClient {
             session: data.session || { access_token: token } 
           };
         } else {
-          // If session is invalid, clear token
+          // If session is invalid, clear token and redirect to login
           localStorage.removeItem('auth_token');
           result = { success: false, error: 'Invalid or expired session' };
+          
+          // If we're in a browser environment, redirect to login
+          if (typeof window !== 'undefined' && window.location) {
+            // Only redirect if we're not already on the login page
+            if (!window.location.pathname.includes('/login')) {
+              window.location.href = '/login';
+            }
+          }
         }
         
         // Update cache

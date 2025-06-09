@@ -72,7 +72,7 @@ function UserCredits() {
       ) : (
         <div className={`user-credits ${credits < 5 ? 'low-credits' : ''}`}>
           <div className="credits-content">
-            <span className="credits-value">${credits}</span>
+            <span className="credits-value">{credits}</span>
           </div>
           {credits < 5 && (
             <Link to="/top-up" className="credits-action" title="Add Credits">

@@ -168,9 +168,12 @@ tr:hover td {
 
 .empty-table {
   text-align: center;
-  padding: 2rem;
-  color: var(--dark-gray);
+  padding: 3rem 2rem;
+  color: var(--text-secondary);
   font-style: italic;
+  font-size: 1rem;
+  background-color: var(--surface-color);
+  border-radius: var(--radius-md);
 }
 
 @media (max-width: 768px) {

@@ -1,5 +1,4 @@
 import supabase from '../services/supabase.js';
-import fs from 'fs';
 import config from '../config/index.js';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
