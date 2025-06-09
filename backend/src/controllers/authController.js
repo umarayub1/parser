@@ -1,4 +1,4 @@
-import supabase from '../services/supabase.js';
+import supabase, { supabaseAdmin } from '../services/supabase.js';
 import config from '../config/index.js';
 
 /**
@@ -30,7 +30,7 @@ export const signup = async (req, res) => {
     
     // Create a profile entry in profiles table if needed
     if (data?.user?.id) {
-      const { error: profileError } = await supabase
+      const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .upsert({
           id: data.user.id,
@@ -232,7 +232,7 @@ export const getCredits = async (req, res) => {
     }
     
     // Get user's credits from the database
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('profiles')
       .select('credits_remaining')
       .eq('id', req.user.id)

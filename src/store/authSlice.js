@@ -189,6 +189,15 @@ const authSlice = createSlice({
       // If session is null, also clear user
       if (!action.payload) {
         state.user = null;
+        // Clear auth token from localStorage when session is cleared
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('auth_token');
+        }
+      } else {
+        // Store auth token in localStorage when session is set
+        if (action.payload.access_token && typeof window !== 'undefined') {
+          localStorage.setItem('auth_token', action.payload.access_token);
+        }
       }
     },
     clearError: (state) => {

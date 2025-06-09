@@ -41,6 +41,12 @@ const SessionManager = () => {
           dispatch(setSession(session));
           dispatch(setUser(session.user));
           
+          // Store auth token in localStorage for ApiClient to use
+          if (session.access_token) {
+            localStorage.setItem('auth_token', session.access_token);
+            console.log('OAuth session token stored in localStorage');
+          }
+          
           // Clear URL hash if present (from OAuth callback)
           if (window.location.hash) {
             window.history.replaceState(null, null, window.location.pathname);
@@ -55,6 +61,10 @@ const SessionManager = () => {
           dispatch(setSession(null));
           dispatch(setUser(null));
           
+          // Clear auth token from localStorage
+          localStorage.removeItem('auth_token');
+          console.log('Auth token removed from localStorage on sign out');
+          
           // Navigate to login if not on public pages
           if (!['/login', '/signup', '/contact', '/'].includes(location.pathname)) {
             navigate('/login');
@@ -63,6 +73,12 @@ const SessionManager = () => {
           // Token was refreshed
           dispatch(setSession(session));
           dispatch(setUser(session.user));
+          
+          // Update auth token in localStorage
+          if (session.access_token) {
+            localStorage.setItem('auth_token', session.access_token);
+            console.log('Refreshed session token updated in localStorage');
+          }
         }
       }
     );
@@ -94,6 +110,12 @@ const SessionManager = () => {
             // Update Redux state
             dispatch(setSession(session));
             dispatch(setUser(session.user));
+            
+            // Store auth token in localStorage for ApiClient to use
+            if (session.access_token) {
+              localStorage.setItem('auth_token', session.access_token);
+              console.log('OAuth callback session token stored in localStorage');
+            }
             
             // Clear the hash from URL
             window.history.replaceState(null, null, window.location.pathname);

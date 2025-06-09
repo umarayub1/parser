@@ -29,6 +29,12 @@ const AuthCallbackPage = () => {
           dispatch(setSession(session));
           dispatch(setUser(session.user));
           
+          // Store auth token in localStorage for ApiClient to use
+          if (session.access_token) {
+            localStorage.setItem('auth_token', session.access_token);
+            console.log('OAuth callback session token stored in localStorage');
+          }
+          
           // Navigate to the main app
           navigate('/requests');
         } else {
