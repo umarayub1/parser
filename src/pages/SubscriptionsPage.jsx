@@ -26,10 +26,10 @@ function SubscriptionsPage() {
         try {
           setIsLoading(true);
           
-          // Fetch user credits
-          const credits = await ApiClient.getCredits();
+          // Force refresh user credits (bypass cache in case we're coming from a subscription)
+          const credits = await ApiClient.getCredits(true);
           
-          if (credits) {
+          if (credits !== null && credits !== undefined) {
             setCredits(credits);
           }
           
@@ -89,9 +89,15 @@ function SubscriptionsPage() {
       }
       
       // Call the service to initialize checkout
+      const planDetails = {
+        name: plan.name,
+        amount: billingCycle === 'yearly' ? (plan.price * 0.8 * 12).toFixed(2) : plan.price
+      };
+      
       const checkoutData = await lemonsqueezyService.initializeCheckout(
         variantId,
-        user.id
+        user.id,
+        planDetails
       );
       
       // Store billing cycle preference
@@ -117,7 +123,18 @@ function SubscriptionsPage() {
       const status = query.get('status');
       
       if (status) {
-        // Clear the URL parameters
+        // Handle legacy redirects by forwarding to new payment pages
+        if (status === 'success') {
+          // Redirect to new success page
+          window.location.replace('/payment/success');
+          return;
+        } else if (status === 'cancelled') {
+          // Redirect to new failure page
+          window.location.replace('/payment/failure');
+          return;
+        }
+        
+        // Clear the URL parameters for any other status
         window.history.replaceState({}, document.title, window.location.pathname);
         
         if (status === 'success') {
@@ -295,7 +312,7 @@ function SubscriptionsPage() {
               </div>
               <div className="faq-item">
                 <h4>Do unused credits roll over?</h4>
-                <p>Credits reset each billing cycle and do not roll over to the next period.</p>
+                <p>Yes, unused credits roll over to the next month, so you never lose credits you've paid for.</p>
               </div>
               <div className="faq-item">
                 <h4>How do I get more credits?</h4>

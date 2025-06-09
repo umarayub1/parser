@@ -7,6 +7,7 @@ import supabaseRoutes from './routes/supabaseRoutes.js';
 import functionsRoutes from './routes/functionsRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import supportRoutes from './routes/supportRoutes.js';
 import { handleLemonSqueezyWebhook } from './controllers/subscriptionController.js';
 import getRawBody from 'raw-body';
 import { runHealthCheck } from './utils/subscriptionMonitoring.js';
@@ -16,7 +17,24 @@ const app = express();
 const PORT = config.port;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (config.allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      console.log('Allowed origins:', config.allowedOrigins);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'X-Requested-With'],
+  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+}));
 
 // Handle Lemon Squeezy webhooks - Must be before JSON middleware for signature verification
 app.post('/api/webhooks/lemonsqueezy', async (req, res) => {
@@ -36,6 +54,12 @@ app.post('/api/webhooks/lemonsqueezy', async (req, res) => {
 // Standard JSON parsing for all other routes
 app.use(express.json());
 
+// Debug middleware to log all requests
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No origin'}`);
+  next();
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ 
@@ -51,6 +75,7 @@ app.use('/api', apiKeyRoutes);
 app.use('/api', pdfRoutes);
 app.use('/api', authRoutes);
 app.use('/api', subscriptionRoutes);
+app.use('/api', supportRoutes);
 app.use('/api/supabase', supabaseRoutes);
 app.use('/api/functions', functionsRoutes);
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { selectUser } from '../store/authSlice';
@@ -21,43 +21,88 @@ const debounce = (func, wait) => {
 function UserCredits() {
   const [credits, setCredits] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(0);
   const user = useSelector(selectUser);
   
-  // Use the useEffect hook with better dependency tracking
+  // Create a memoized refresh function
+  const refreshCredits = useCallback(async (forceRefresh = false) => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      const credits = await ApiClient.getCredits(forceRefresh);
+      setCredits(credits || 0);
+      setLastRefresh(Date.now());
+    } catch (err) {
+      console.error('Error fetching user credits:', err);
+      setCredits(0);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  // Debounced version of refresh
+  const debouncedRefresh = useCallback(
+    debounce(() => refreshCredits(false), 300),
+    [refreshCredits]
+  );
+
+  // Initial fetch
   useEffect(() => {
     let isMounted = true;
-    const fetchCreditsOnce = debounce(async () => {
+    
+    const fetchInitialCredits = async () => {
       if (!user || !isMounted) {
         setIsLoading(false);
         return;
       }
       
-      try {
-        setIsLoading(true);
-        // ApiClient now handles caching internally
-        const credits = await ApiClient.getCredits();
-        if (isMounted) {
-          setCredits(credits || 0);
-        }
-      } catch (err) {
-        console.error('Error fetching user credits:', err);
-        if (isMounted) {
-          setCredits(0);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }, 300); // 300ms debounce
+      await refreshCredits(false);
+    };
     
-    fetchCreditsOnce();
+    fetchInitialCredits();
     
-    // Cleanup function to prevent state updates after unmount
     return () => {
       isMounted = false;
     };
-  }, [user?.id]); // Only re-run if user ID changes, not the entire user object
+  }, [user?.id, refreshCredits]);
+
+  // Listen for page visibility changes to refresh credits when user returns
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user) {
+        const timeSinceLastRefresh = Date.now() - lastRefresh;
+        // Only refresh if it's been more than 30 seconds since last refresh
+        if (timeSinceLastRefresh > 30000) {
+          debouncedRefresh();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user, lastRefresh, debouncedRefresh]);
+
+  // Listen for storage events to refresh credits when another tab updates them
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'credits_updated' && user) {
+        debouncedRefresh();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [user, debouncedRefresh]);
 
   if (!user) {
     return null;
@@ -72,7 +117,7 @@ function UserCredits() {
       ) : (
         <div className={`user-credits ${credits < 5 ? 'low-credits' : ''}`}>
           <div className="credits-content">
-            <span className="credits-value">{credits}</span>
+            <span className="credits-value">{credits.toFixed(1)}</span>
           </div>
           {credits < 5 && (
             <Link to="/top-up" className="credits-action" title="Add Credits">

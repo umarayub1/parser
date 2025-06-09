@@ -212,30 +212,6 @@ export const addCreditsToUser = async (userId, creditsToAdd) => {
 };
 
 /**
- * Get credits for a subscription variant
- */
-export const getCreditsForVariant = async (variantId) => {
-  // Find the plan in config
-  for (const plan of config.lemonSqueezy.plans) {
-    if (plan.variantId === variantId) {
-      return plan.credits;
-    }
-  }
-  
-  // Fallback to hardcoded values if plan not found in config
-  if (variantId === config.lemonSqueezy.basicVariantId) {
-    return 10; // Basic plan: 10 credits
-  } else if (variantId === config.lemonSqueezy.proVariantId) {
-    return 60; // Pro plan: 60 credits
-  } else if (variantId === config.lemonSqueezy.premiumVariantId) {
-    return 150; // Premium plan: 150 credits
-  }
-  
-  console.warn(`No credit allocation found for variant ID: ${variantId}`);
-  return 0; // Default: 0 credits
-};
-
-/**
  * Ensure the credit_transactions table exists
  */
 export const ensureCreditTransactionsTable = async () => {

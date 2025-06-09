@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import config from '../config/index.js';
 import crypto from 'crypto';
 import { createCheckoutSession, getSubscriptionData, getUserSubscriptions, cancelUserSubscription } from '../services/lemonsqueezyService.js';
-import { storeWebhookEvent, updateSubscriptionStatus, createSubscriptionRecord, addCreditsToUser, getCreditsForVariant, getUserCredits } from '../utils/dbUtils.js';
+import { storeWebhookEvent, updateSubscriptionStatus, createSubscriptionRecord, addCreditsToUser, getUserCredits } from '../utils/dbUtils.js';
+import { getPlanByVariantId, invalidatePlanCache } from '../services/planService.js';
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -642,28 +643,28 @@ async function handleSubscriptionCreated(data, userId) {
     
     // If subscription is active or on trial, add initial credits
     if (attributes.status === 'active' || attributes.status === 'on_trial') {
-      // Get plan details from config to ensure credits are consistent
-      const planConfig = getPlanConfigByVariantId(variantId);
+      // Get plan details from database to ensure credits are consistent
+      const planConfig = await getPlanByVariantId(variantId);
       
-      if (planConfig && planConfig.credits > 0) {
+              if (planConfig && planConfig.monthly_credits > 0) {
         // Check if this is an upgrade, prorate credits if needed
         if (existingSubscriptions && existingSubscriptions.length > 0) {
           await handlePlanUpgrade(userId, existingSubscriptions[0], planConfig);
-        } else {
-          // Standard credit allocation for new subscription
-          await addCreditsToUser(userId, planConfig.credits);
-          
-          // Record the initial credit transaction
-          await supabase
-            .from('credit_transactions')
-            .insert({
-              user_id: userId,
-              amount: planConfig.credits,
-              subscription_id: lemonsqueezyId,
-              description: `Initial credits for ${planConfig.name || 'subscription'}`,
-              created_at: new Date().toISOString()
-            });
-        }
+                  } else {
+            // Standard credit allocation for new subscription
+            await addCreditsToUser(userId, planConfig.monthly_credits);
+            
+            // Record the initial credit transaction
+            await supabase
+              .from('credit_transactions')
+              .insert({
+                user_id: userId,
+                amount: planConfig.monthly_credits,
+                subscription_id: lemonsqueezyId,
+                description: `Initial credits for ${planConfig.plan_name || 'subscription'}`,
+                created_at: new Date().toISOString()
+              });
+          }
       } else {
         console.warn(`No plan configuration found for variant ${variantId}`);
       }
@@ -782,8 +783,8 @@ async function handlePaymentSuccess(data, userId) {
       throw new Error(`No variant ID found for subscription ${lemonsqueezyId}`);
     }
 
-    // Get plan configuration
-    const planConfig = getPlanConfigByVariantId(variantId);
+    // Get plan configuration from database
+    const planConfig = await getPlanByVariantId(variantId);
     
     if (!planConfig) {
       throw new Error(`No plan configuration found for variant ${variantId}`);
@@ -819,60 +820,38 @@ async function handlePaymentSuccess(data, userId) {
           return;
         }
         
-        await addCreditsToUser(userId, planConfig.credits);
+        await addCreditsToUser(userId, planConfig.monthly_credits);
         
         // Record the credit transaction
         await supabase
           .from('credit_transactions')
           .insert({
             user_id: userId,
-            amount: planConfig.credits,
+            amount: planConfig.monthly_credits,
             subscription_id: lemonsqueezyId,
-            description: `Monthly credit allocation for yearly ${planConfig.name || 'subscription'}`,
+            description: `Monthly credit allocation for yearly ${planConfig.plan_name || 'subscription'}`,
             created_at: now.toISOString()
           });
         
       } else {
         // Monthly plan renewal
-        await addCreditsToUser(userId, planConfig.credits);
+        await addCreditsToUser(userId, planConfig.monthly_credits);
         
         // Record the credit transaction
         await supabase
           .from('credit_transactions')
           .insert({
             user_id: userId,
-            amount: planConfig.credits,
+            amount: planConfig.monthly_credits,
             subscription_id: lemonsqueezyId,
-            description: `Monthly renewal for ${planConfig.name || 'subscription'}`,
+            description: `Monthly renewal for ${planConfig.plan_name || 'subscription'}`,
             created_at: new Date().toISOString()
           });
       }
     } else {
-      // Initial payment is handled by the subscription_created event,
-      // but we'll add credits here as a backup in case that event was missed
-      const { data: existingSubscription } = await supabase
-        .from('subscriptions')
-        .select('created_at')
-        .eq('lemonsqueezy_id', lemonsqueezyId)
-        .single();
-        
-      const isNewSubscription = !existingSubscription || 
-        (new Date() - new Date(existingSubscription.created_at)) / (1000 * 60) < 10; // Created within last 10 minutes
-        
-      if (isNewSubscription) {
-        await addCreditsToUser(userId, planConfig.credits);
-        
-        // Record the credit transaction
-        await supabase
-          .from('credit_transactions')
-          .insert({
-            user_id: userId,
-            amount: planConfig.credits,
-            subscription_id: lemonsqueezyId,
-            description: `Initial credits for ${planConfig.name || 'subscription'}`,
-            created_at: new Date().toISOString()
-          });
-      }
+      // Initial payment should only be handled by the subscription_created event
+      // Remove backup credit allocation to prevent double allocation
+      console.log(`Initial payment detected for subscription ${lemonsqueezyId} - credits should already be allocated by subscription_created event`);
     }
   } catch (error) {
     console.error('Error handling payment success webhook:', error);
@@ -928,31 +907,7 @@ async function getUserIdFromSubscription(subscriptionId, variantId) {
   }
 }
 
-/**
- * Get plan configuration by variant ID
- */
-function getPlanConfigByVariantId(variantId) {
-  // Check if plans array exists and is iterable
-  if (config.lemonSqueezy.plans && Array.isArray(config.lemonSqueezy.plans)) {
-    // Find the plan in config
-    for (const plan of config.lemonSqueezy.plans) {
-      if (parseInt(plan.variantId, 10) === parseInt(variantId, 10)) {
-        return plan;
-      }
-    }
-  }
-  
-  // Fallback to hardcoded values if plan not found in config
-  if (variantId === config.lemonSqueezy.basicVariantId) {
-    return { credits: 10, name: 'Basic Plan' };
-  } else if (variantId === config.lemonSqueezy.proVariantId) {
-    return { credits: 60, name: 'Pro Plan' };
-  } else if (variantId === config.lemonSqueezy.premiumVariantId) {
-    return { credits: 150, name: 'Premium Plan' };
-  }
-  
-  return null;
-}
+// getPlanConfigByVariantId function removed - now using database-based planService
 
 /**
  * Handle plan upgrade/downgrade with credit proration
@@ -963,11 +918,11 @@ async function handlePlanUpgrade(userId, oldSubscription, newPlanConfig) {
     const currentCredits = await getUserCredits(userId);
     
     // Get old plan configuration
-    const oldPlanConfig = getPlanConfigByVariantId(oldSubscription.variant_id);
+    const oldPlanConfig = await getPlanByVariantId(oldSubscription.variant_id);
     
     if (!oldPlanConfig) {
-      // If old plan not found, just add new credits
-      return await addCreditsToUser(userId, newPlanConfig.credits);
+              // If old plan not found, just add new credits
+        return await addCreditsToUser(userId, newPlanConfig.monthly_credits);
     }
     
     // Calculate remaining time in billing period for old subscription
@@ -982,16 +937,16 @@ async function handlePlanUpgrade(userId, oldSubscription, newPlanConfig) {
     }
     
     // Prorate old subscription credits
-    const proratedOldCredits = Math.round((remainingDays / totalDaysInPeriod) * oldPlanConfig.credits);
+    const proratedOldCredits = Math.round((remainingDays / totalDaysInPeriod) * oldPlanConfig.monthly_credits);
     
     // Add difference between old prorated credits and new full credits
-    const creditAdjustment = newPlanConfig.credits - proratedOldCredits;
+    const creditAdjustment = newPlanConfig.monthly_credits - proratedOldCredits;
     
     if (creditAdjustment !== 0) {
       await addCreditsToUser(userId, creditAdjustment);
       
       // Log the adjustment
-      console.log(`Plan change for user ${userId}: Adjusted credits by ${creditAdjustment} (new: ${newPlanConfig.credits}, old prorated: ${proratedOldCredits})`);
+      console.log(`Plan change for user ${userId}: Adjusted credits by ${creditAdjustment} (new: ${newPlanConfig.monthly_credits}, old prorated: ${proratedOldCredits})`);
       
       // Store record of adjustment in database
       await supabase
@@ -999,7 +954,7 @@ async function handlePlanUpgrade(userId, oldSubscription, newPlanConfig) {
         .insert({
           user_id: userId,
           amount: creditAdjustment,
-          description: `Plan change: ${oldPlanConfig.name || 'Previous plan'} to ${newPlanConfig.name || 'New plan'}`,
+          description: `Plan change: ${oldPlanConfig.plan_name || 'Previous plan'} to ${newPlanConfig.plan_name || 'New plan'}`,
           created_at: new Date().toISOString()
         });
     }

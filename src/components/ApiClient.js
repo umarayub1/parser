@@ -187,6 +187,14 @@ class ApiClient {
       apiCache.credits.value = data.credits;
       apiCache.credits.timestamp = now;
       
+      // Trigger storage event to notify other components/tabs of credit update
+      try {
+        localStorage.setItem('credits_updated', Date.now().toString());
+        localStorage.removeItem('credits_updated'); // Clean up immediately
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+      
       return data.credits;
     } catch (error) {
       // If there's an error, pass it up but still clear the fetchInProgress flag
@@ -539,6 +547,55 @@ class ApiClient {
   }
 
   /**
+   * Get credit cost per page for the current user's plan
+   * @returns {Promise<number>} - Credit cost per page
+   */
+  async getCreditCostPerPage() {
+    try {
+      const sessionResponse = await this.getSession();
+      if (sessionResponse.success) {
+        return sessionResponse.credit_cost_per_page || 0.17; // Default to basic plan rate
+      }
+      return 0.17; // Default basic plan rate
+    } catch (error) {
+      console.error('Error getting credit cost per page:', error);
+      return 0.17; // Default basic plan rate
+    }
+  }
+
+  /**
+   * Get user plan information
+   * @returns {Promise<Object|null>} - User plan object or null if no active subscription
+   */
+  async getUserPlan() {
+    try {
+      const sessionResponse = await this.getSession();
+      if (sessionResponse.success) {
+        return sessionResponse.user_plan || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting user plan:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Calculate credit cost for PDF parsing based on page count and user's plan
+   * @param {number} pageCount - Number of pages in the PDF
+   * @returns {Promise<number>} - Total credit cost for parsing
+   */
+  async calculatePdfCreditCost(pageCount) {
+    try {
+      const costPerPage = await this.getCreditCostPerPage();
+      return pageCount * costPerPage;
+    } catch (error) {
+      console.error('Error calculating PDF credit cost:', error);
+      return pageCount * 0.17; // Default basic plan rate
+    }
+  }
+
+  /**
    * Get current session
    * @returns {Promise<Object|null>} - Session object or null if not authenticated
    */
@@ -601,7 +658,9 @@ class ApiClient {
         if (response.ok && data.success) {
           result = { 
             success: true, 
-            session: data.session || { access_token: token } 
+            session: data.session || { access_token: token },
+            user_plan: data.user_plan || null,
+            credit_cost_per_page: data.credit_cost_per_page || 0.17
           };
         } else {
           // If session is invalid, clear token and redirect to login

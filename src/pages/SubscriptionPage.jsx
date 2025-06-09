@@ -56,9 +56,15 @@ function SubscriptionPage() {
 
     try {
       // Call the service to initialize checkout
+      const planDetails = {
+        name: plan.name,
+        amount: plan.price
+      };
+      
       const checkoutData = await lemonsqueezyService.initializeCheckout(
         plan.variantId,
-        user.id
+        user.id,
+        planDetails
       );
       
       // Redirect to LemonSqueezy checkout
@@ -108,7 +114,18 @@ function SubscriptionPage() {
       const status = query.get('status');
       
       if (status) {
-        // Clear the URL parameters
+        // Handle legacy redirects by forwarding to new payment pages
+        if (status === 'success') {
+          // Redirect to new success page
+          window.location.replace('/payment/success');
+          return;
+        } else if (status === 'cancelled') {
+          // Redirect to new failure page
+          window.location.replace('/payment/failure');
+          return;
+        }
+        
+        // Clear the URL parameters for any other status
         window.history.replaceState({}, document.title, window.location.pathname);
         
         if (status === 'success') {

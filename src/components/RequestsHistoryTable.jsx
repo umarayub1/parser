@@ -494,7 +494,7 @@ function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
                     <StatusBadge status={req.parsing_status} />
                   </td>
                   <td className="history-table-cell offset-column" data-label="Balance Offset">
-                    {req.parsed_data?.meta_data?.["Ending Balance Offset"]}
+                    {req.ending_balance_offset}
                   </td>
                 </tr>
               );

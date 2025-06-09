@@ -21,27 +21,27 @@ const config = {
       {
         id: 'basic',
         name: 'Basic Plan',
-        price: 9.99,
-        credits: 10,
-        features: ['10 credits per month', 'Basic support', 'Access to core features'],
+        price: 39.99,
+        credits: 40,
+        features: ['Credits roll over to next month', 'Basic support', 'Access to core features'],
         variantId: import.meta.env.VITE_LEMONSQUEEZY_BASIC_VARIANT_ID,
         yearlyVariantId: import.meta.env.VITE_LEMONSQUEEZY_BASIC_YEARLY_VARIANT_ID
       },
       {
         id: 'pro',
         name: 'Pro Plan',
-        price: 49.99,
-        credits: 60,
-        features: ['60 credits per month', 'Priority support', 'Access to all features'],
+        price: 99.99,
+        credits: 100,
+        features: ['Credits roll over to next month', 'Priority support', 'Access to all features'],
         variantId: import.meta.env.VITE_LEMONSQUEEZY_PRO_VARIANT_ID,
         yearlyVariantId: import.meta.env.VITE_LEMONSQUEEZY_PRO_YEARLY_VARIANT_ID
       },
       {
         id: 'premium',
         name: 'Premium Plan',
-        price: 99.99,
-        credits: 150,
-        features: ['150 credits per month', 'Premium support', 'Early access to new features'],
+        price: 199.99,
+        credits: 200,
+        features: ['Credits roll over to next month', 'Premium support', 'Early access to new features'],
         variantId: import.meta.env.VITE_LEMONSQUEEZY_PREMIUM_VARIANT_ID,
         yearlyVariantId: import.meta.env.VITE_LEMONSQUEEZY_PREMIUM_YEARLY_VARIANT_ID
       }

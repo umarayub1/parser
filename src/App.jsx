@@ -12,7 +12,6 @@ import SessionManager from './components/auth/SessionManager';
 // Import pages
 import SubscriptionsPage from './pages/SubscriptionsPage';
 import ProfilePage from './pages/ProfilePage';
-import ContactPage from './pages/ContactPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
@@ -21,6 +20,9 @@ import ApiExamplesPage from './pages/ApiExamplesPage';
 import LandingPage from './pages/LandingPage';
 import RequestsPage from './pages/RequestsPage';
 import RequestPage from '../src/components/RequestPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import PaymentFailurePage from './pages/PaymentFailurePage';
+import SupportPage from './pages/SupportPage';
 
 // Import Redux selectors
 import { selectUser, selectSession } from './store/authSlice';
@@ -55,7 +57,10 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />
-            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/contact" element={<SupportPage />} />
+            <Route path="/support" element={<SupportPage />} />
+            <Route path="/payment/success" element={<PaymentSuccessPage />} />
+            <Route path="/payment/failure" element={<PaymentFailurePage />} />
             <Route path="*" element={<LandingPage />} />
           </Routes>
         ) : (
@@ -66,12 +71,16 @@ function App() {
             />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/subscriptions" element={<SubscriptionsPage />} />
+            <Route path="/subscription" element={<SubscriptionsPage />} />
             <Route path="/top-up" element={<Navigate to="/subscriptions" replace />} />
             <Route path="/requests/:id" element={<RequestPage />} />
             <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/contact" element={<SupportPage />} />
+            <Route path="/support" element={<SupportPage />} />
             <Route path="/api-docs" element={<ApiDocsPage />} />
             <Route path="/api-examples" element={<ApiExamplesPage />} />
+            <Route path="/payment/success" element={<PaymentSuccessPage />} />
+            <Route path="/payment/failure" element={<PaymentFailurePage />} />
             <Route path="/login" element={<Navigate to="/requests" replace />} />
             <Route path="/signup" element={<Navigate to="/requests" replace />} />
           </Routes>

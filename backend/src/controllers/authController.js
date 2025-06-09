@@ -1,5 +1,6 @@
 import supabase, { supabaseAdmin } from '../services/supabase.js';
 import config from '../config/index.js';
+import { getUserCurrentPlan } from '../services/planService.js';
 
 /**
  * User signup
@@ -265,10 +266,33 @@ export const getSession = async (req, res) => {
         error: 'No active session'
       });
     }
-    
+
+    // Fetch user's subscription plan using the plan service
+    let userPlan = null;
+    let creditCostPerPage = 0.17; // Default basic plan rate
+
+    try {
+      const currentPlan = await getUserCurrentPlan(req.user.id);
+      
+      if (currentPlan) {
+        userPlan = {
+          name: currentPlan.plan_name,
+          variant_id: currentPlan.variant_id,
+          status: currentPlan.subscription_status,
+          plan_slug: currentPlan.plan_slug
+        };
+        creditCostPerPage = parseFloat(currentPlan.credit_cost_per_page);
+      }
+    } catch (error) {
+      console.error('Error fetching user plan:', error);
+      // Continue with default values if plan fetch fails
+    }
+
     return res.status(200).json({
       success: true,
-      session: req.session
+      session: req.session,
+      user_plan: userPlan,
+      credit_cost_per_page: creditCostPerPage
     });
   } catch (error) {
     console.error('Get session error:', error);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
-import { selectUser } from '../store/authSlice';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectUser, selectCredits, fetchCredits } from '../store/authSlice';
 import { PDFDocument } from 'pdf-lib';
 import ApiClient from './ApiClient';
 import { supabase } from '../supabaseClient';
@@ -8,35 +8,47 @@ import './NewRequestModal.css';
 
 const NewRequestModal = ({ isOpen, onClose, onRequestsCreated }) => {
   const user = useSelector(selectUser);
+  const userCredits = useSelector(selectCredits);
+  const dispatch = useDispatch();
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [userCredits, setUserCredits] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
   const [processingFiles, setProcessingFiles] = useState([]);
+  const [creditCostPerPage, setCreditCostPerPage] = useState(0.17);
+  const [userPlan, setUserPlan] = useState(null);
 
-  // Fetch user credits when modal opens
+  // Fetch credits and user plan when modal opens
   useEffect(() => {
-    if (isOpen && user?.id) {
-      fetchUserCredits();
-    }
-  }, [isOpen, user?.id]);
+    const fetchUserData = async () => {
+      if (isOpen && user?.id) {
+        if (userCredits === 0 || userCredits === undefined) {
+          dispatch(fetchCredits());
+        }
+        
+        try {
+          // Fetch user plan information
+          const plan = await ApiClient.getUserPlan();
+          setUserPlan(plan);
+          
+          // Fetch credit cost per page based on user's plan
+          const costPerPage = await ApiClient.getCreditCostPerPage();
+          setCreditCostPerPage(costPerPage);
+        } catch (error) {
+          console.error('Error fetching user plan:', error);
+          // Keep default values
+        }
+      }
+    };
+    
+    fetchUserData();
+  }, [isOpen, user?.id, userCredits, dispatch]);
 
-  // Calculate total cost when files change
+  // Calculate total cost when files change or credit cost per page changes
   useEffect(() => {
-    const cost = files.reduce((total, file) => total + (file.pageCount * 0.1), 0);
+    const cost = files.reduce((total, file) => total + (file.pageCount * creditCostPerPage), 0);
     setTotalCost(cost);
-  }, [files]);
-
-  const fetchUserCredits = async () => {
-    try {
-      const credits = await ApiClient.getCredits(true); // Force refresh
-      setUserCredits(credits);
-    } catch (err) {
-      console.error('Error fetching credits:', err);
-      setError('Failed to fetch user credits');
-    }
-  };
+  }, [files, creditCostPerPage]);
 
   const handleFileChange = async (event) => {
     const selectedFiles = Array.from(event.target.files);
@@ -76,7 +88,7 @@ const NewRequestModal = ({ isOpen, onClose, onRequestsCreated }) => {
           name: file.name,
           size: file.size,
           pageCount,
-          cost: pageCount * 0.1,
+          cost: pageCount * creditCostPerPage,
           id: Math.random().toString(36).substr(2, 9)
         });
       } catch (error) {
@@ -99,8 +111,8 @@ const NewRequestModal = ({ isOpen, onClose, onRequestsCreated }) => {
       return;
     }
 
-    if (userCredits < totalCost) {
-      setError(`Insufficient credits. You need ${totalCost.toFixed(1)} credits but have ${userCredits.toFixed(1)}. Please top up your credits.`);
+    if ((userCredits || 0) < totalCost) {
+      setError(`Insufficient credits. You need ${totalCost.toFixed(1)} credits but have ${(userCredits || 0).toFixed(1)}. Please top up your credits.`);
       return;
     }
 
@@ -157,22 +169,22 @@ const NewRequestModal = ({ isOpen, onClose, onRequestsCreated }) => {
         return requestId;
       });
 
-      // Wait for all requests to complete
-      const createdRequests = await Promise.all(processFilePromises);
+              // Wait for all requests to complete
+        const createdRequests = await Promise.all(processFilePromises);
 
-      // Refresh user credits
-      await fetchUserCredits();
+        // Refresh user credits in Redux state
+        dispatch(fetchCredits());
 
-      // Notify parent component
-      if (onRequestsCreated) {
-        onRequestsCreated(createdRequests);
-      }
+        // Notify parent component
+        if (onRequestsCreated) {
+          onRequestsCreated(createdRequests);
+        }
 
-      // Close modal and reset state
-      onClose();
-      setFiles([]);
-      setProcessingFiles([]);
-      setError('');
+        // Close modal and reset state
+        onClose();
+        setFiles([]);
+        setProcessingFiles([]);
+        setError('');
 
     } catch (err) {
       console.error('Error processing files:', err);
@@ -197,12 +209,12 @@ const NewRequestModal = ({ isOpen, onClose, onRequestsCreated }) => {
           <div className="credits-info">
             <div className="credits-display">
               <span className="credits-label">Available Credits:</span>
-              <span className="credits-value">{userCredits.toFixed(1)}</span>
+              <span className="credits-value">{(userCredits || 0).toFixed(1)}</span>
             </div>
             {totalCost > 0 && (
               <div className="cost-display">
                 <span className="cost-label">Total Cost:</span>
-                <span className={`cost-value ${userCredits < totalCost ? 'insufficient' : ''}`}>
+                <span className={`cost-value ${(userCredits || 0) < totalCost ? 'insufficient' : ''}`}>
                   {totalCost.toFixed(1)}
                 </span>
               </div>
@@ -271,7 +283,7 @@ const NewRequestModal = ({ isOpen, onClose, onRequestsCreated }) => {
           <button
             className="submit-button"
             onClick={handleSubmit}
-            disabled={isLoading || files.length === 0 || userCredits < totalCost}
+            disabled={isLoading || files.length === 0 || (userCredits || 0) < totalCost}
           >
             {isLoading ? 'Processing...' : `Submit ${files.length} Request${files.length !== 1 ? 's' : ''}`}
           </button>

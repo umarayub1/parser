@@ -66,7 +66,7 @@ const SessionManager = () => {
           console.log('Auth token removed from localStorage on sign out');
           
           // Navigate to login if not on public pages
-          if (!['/login', '/signup', '/contact', '/'].includes(location.pathname)) {
+          if (!['/login', '/signup', '/contact', '/support', '/'].includes(location.pathname)) {
             navigate('/login');
           }
         } else if (event === 'TOKEN_REFRESHED' && session) {

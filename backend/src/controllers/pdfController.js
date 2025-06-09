@@ -5,6 +5,7 @@ import { PDFDocument } from 'pdf-lib';
 import supabase from '../services/supabase.js';
 import { logApiRequest } from '../utils/logUtils.js';
 import config from '../config/index.js';
+import { calculateCreditCost } from '../services/planService.js';
 
 /**
  * Parse PDF document
@@ -90,8 +91,9 @@ export async function parsePdf(req, res) {
       
       const requestId = requestData.id;
       
-      // Calculate credit cost (0.5 credits per page, minimum 1)
-      const creditCost = Math.max(1, pageCount * 0.5);
+      // Calculate credit cost based on user's plan
+      const creditCalculation = await calculateCreditCost(userId, pageCount);
+      const creditCost = Math.max(1, creditCalculation.total_credits);
       
       // Deduct credits
       const { error: creditDeductionError } = await supabase
@@ -104,10 +106,13 @@ export async function parsePdf(req, res) {
         throw new Error(`Failed to deduct credits: ${creditDeductionError.message}`);
       }
 
-      // Update request status
+      // Update request status and store credits consumed
       await supabase
         .from('requests')
-        .update({ parsing_status: 'submitting' })
+        .update({ 
+          parsing_status: 'submitting',
+          credits_consumed: creditCost
+        })
         .eq('id', requestId);
 
       // Prepare form data for parsing API
@@ -148,7 +153,7 @@ export async function parsePdf(req, res) {
           },
         });
         
-        // Update request status to processing
+        // Update request status to processing (credits_consumed already set above)
         await supabase
           .from('requests')
           .update({
@@ -189,6 +194,8 @@ export async function parsePdf(req, res) {
         requestId: requestId,
         pageCount: pageCount,
         creditCost: creditCost.toFixed(1),
+        creditCostPerPage: creditCalculation.credit_cost_per_page,
+        planName: creditCalculation.plan_name,
         estimatedTime: `${pageCount * 20} seconds`, // Estimate 20 seconds per page
         pdfMetadata: metadata ? { title: metadata } : null,
         statusUrl: statusUrl,

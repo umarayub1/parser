@@ -1,4 +1,5 @@
 import supabase from '../services/supabase.js';
+import { calculateCreditCost } from '../services/planService.js';
 import config from '../config/index.js';
 import { Resend } from 'resend';
 import dotenv from 'dotenv';
@@ -56,7 +57,9 @@ export const parseBankStatement = async (req, res) => {
       });
     }
 
-    const creditCost = requestData.page_count * 0.1;
+    // Calculate credit cost based on user's plan
+    const creditCalculation = await calculateCreditCost(requestData.user_id, requestData.page_count);
+    const creditCost = creditCalculation.total_credits;
     
     // 2. Check if user has enough credits
     const { data: profileData, error: profileError } = await supabase
@@ -101,7 +104,8 @@ export const parseBankStatement = async (req, res) => {
           requestId: requestId, 
           type: 'parsing_fee', 
           pages: requestData.page_count,
-          rate_per_page: 0.1
+          rate_per_page: creditCalculation.credit_cost_per_page,
+          plan_name: creditCalculation.plan_name
         }
       });
 
@@ -223,14 +227,15 @@ export const parseBankStatement = async (req, res) => {
       console.log("SUBMIT: API returned non-JSON success response."); 
     }
 
-    // 11. Update DB: Mark as PROCESSING (waiting for callback)
+    // 11. Update DB: Mark as PROCESSING (waiting for callback) and store credits consumed
     console.log(`SUBMIT: Job submitted successfully for Request ID: ${requestId}. Waiting for callback.`);
     await supabase
       .from('requests')
       .update({
         parsing_status: 'processing',
         parsing_started_at: new Date().toISOString(),
-        error_message: null
+        error_message: null,
+        credits_consumed: creditCost
       })
       .eq('id', requestId);
 

@@ -3,8 +3,22 @@ import apiClient from '../components/ApiClient.js';
 
 class LemonSqueezyService {
   // Initialize checkout for a specific subscription plan
-  async initializeCheckout(planId, userId) {
+  async initializeCheckout(planId, userId, planDetails = {}) {
     try {
+      // Build success URL with plan information
+      const successParams = new URLSearchParams({
+        plan: planDetails.name || 'Subscription',
+        amount: planDetails.amount || '',
+        variant_id: planId
+      });
+      
+      // Build failure URL with plan information
+      const failureParams = new URLSearchParams({
+        plan: planDetails.name || 'Subscription',
+        amount: planDetails.amount || '',
+        variant_id: planId
+      });
+
       // Call our backend API that will handle the LemonSqueezy integration
       const response = await fetch(`${config.apiBaseUrl}/subscriptions/checkout`, {
         method: 'POST',
@@ -15,8 +29,8 @@ class LemonSqueezyService {
         body: JSON.stringify({
           planId,
           userId,
-          successUrl: `${window.location.origin}/subscription?status=success`,
-          cancelUrl: `${window.location.origin}/subscription?status=cancelled`,
+          successUrl: `${window.location.origin}/payment/success?${successParams.toString()}`,
+          cancelUrl: `${window.location.origin}/payment/failure?${failureParams.toString()}`,
         }),
       });
 

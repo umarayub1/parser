@@ -1,4 +1,5 @@
 import supabase from '../services/supabase.js';
+import { executeQuery } from '../utils/database.js';
 import fs from 'fs';
 
 // Get all requests for a user
@@ -6,18 +7,27 @@ export const getRequests = async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const { data, error } = await supabase
-      .from('requests')
-      .select('id, created_at, file_name, page_count, parsing_status, parsed_data')
-      .eq('user_id', userId)
-      .eq('is_deleted', false)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
+    // Define the optimized query to fetch only ending balance offset
+    const query = `
+      SELECT 
+        id,
+        created_at,
+        file_name,
+        page_count,
+        parsing_status,
+        parsed_data->'meta_data'->>'Ending Balance Offset' as ending_balance_offset
+      FROM requests 
+      WHERE user_id = $1 
+        AND is_deleted = false 
+      ORDER BY created_at DESC
+    `;
+    
+    // Execute the raw PostgreSQL query
+    const result = await executeQuery(query, [userId]);
     
     return res.status(200).json({
       success: true,
-      data
+      data: result.rows
     });
   } catch (error) {
     console.error('Error fetching requests:', error);

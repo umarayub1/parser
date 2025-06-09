@@ -52,7 +52,7 @@ function RequestPage() {
   useEffect(() => {
     if (!requestId) {
       console.error("No request ID provided in URL parameters");
-      setError("No request ID provided. Please select a request from the dashboard.");
+      setError("No request ID provided. Please select a request from the requests page.");
       setIsLoading(false);
     }
   }, [requestId]);

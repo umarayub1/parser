@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
-import { supabase } from '../supabaseClient';
 import { selectUser } from '../store/authSlice';
+import { submitSupportRequest } from '../services/supportService';
 import '../styles/ContactForm.css';
 
-const ContactForm = () => {
+const SupportForm = () => {
   // Get current user from Redux store
   const user = useSelector(selectUser);
   
@@ -12,7 +12,8 @@ const ContactForm = () => {
     name: user?.user_metadata?.full_name || '',
     email: user?.email || '',
     subject: '',
-    message: ''
+    message: '',
+    category: 'general'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formStatus, setFormStatus] = useState({ type: '', message: '' });
@@ -31,53 +32,49 @@ const ContactForm = () => {
     setFormStatus({ type: '', message: '' });
 
     try {
-      // Prepare message data including user_id if logged in
-      const messageData = {
-        name: formData.name,
-        email: formData.email,
-        subject: formData.subject,
-        message: formData.message
-      };
-
-      // Add user_id if the user is logged in
-      if (user?.id) {
-        messageData.user_id = user.id;
+      const response = await submitSupportRequest(formData);
+      
+      if (response.success) {
+        // Reset form on success
+        setFormData({
+          name: user?.user_metadata?.full_name || '',
+          email: user?.email || '',
+          subject: '',
+          message: '',
+          category: 'general'
+        });
+        setFormStatus({
+          type: 'success',
+          message: response.message || 'Your support request has been submitted successfully. We will get back to you soon!'
+        });
+      } else {
+        throw new Error(response.error || 'Failed to submit support request');
       }
-
-      // Submit to Supabase contact_messages table
-      const { error } = await supabase
-        .from('contact_messages')
-        .insert([messageData]);
-
-      if (error) throw error;
-
-      // Reset form on success
-      setFormData({
-        name: user?.user_metadata?.full_name || '',
-        email: user?.email || '',
-        subject: '',
-        message: ''
-      });
-      setFormStatus({
-        type: 'success',
-        message: 'Your message has been sent successfully. We will get back to you soon!'
-      });
     } catch (error) {
-      console.error('Error submitting contact form:', error);
+      console.error('Error submitting support request:', error);
       setFormStatus({
         type: 'error',
-        message: 'Failed to send message. Please try again later.'
+        message: error.message || 'Failed to submit support request. Please try again later.'
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const supportCategories = [
+    { value: 'general', label: 'General Questions' },
+    { value: 'technical', label: 'Technical Support' },
+    { value: 'payment', label: 'Payment Issues' },
+    { value: 'billing', label: 'Billing Inquiries' },
+    { value: 'account', label: 'Account Questions' },
+    { value: 'feature', label: 'Feature Requests' }
+  ];
+
   return (
     <div className="contact-form-container">
-      <h1>Contact Us</h1>
+      <h1>Support Center</h1>
       <p className="contact-intro">
-        Have a question, suggestion, or comment? We would love to hear from you!
+        Have a question, need help, or want to report an issue? We're here to help!
       </p>
 
       {formStatus.message && (
@@ -112,6 +109,23 @@ const ContactForm = () => {
         </div>
 
         <div className="form-group">
+          <label htmlFor="category">Category</label>
+          <select
+            id="category"
+            name="category"
+            value={formData.category}
+            onChange={handleChange}
+            required
+          >
+            {supportCategories.map(category => (
+              <option key={category.value} value={category.value}>
+                {category.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
           <label htmlFor="subject">Subject</label>
           <input
             type="text"
@@ -119,6 +133,7 @@ const ContactForm = () => {
             name="subject"
             value={formData.subject}
             onChange={handleChange}
+            placeholder="Brief description of your issue"
             required
           />
         </div>
@@ -131,6 +146,7 @@ const ContactForm = () => {
             value={formData.message}
             onChange={handleChange}
             rows="6"
+            placeholder="Describe your issue or question in detail..."
             required
           ></textarea>
         </div>
@@ -140,11 +156,11 @@ const ContactForm = () => {
           className="submit-button" 
           disabled={isSubmitting}
         >
-          {isSubmitting ? 'Sending...' : 'Send Message'}
+          {isSubmitting ? 'Sending...' : 'Send Support Request'}
         </button>
       </form>
     </div>
   );
 };
 
-export default ContactForm; 
+export default SupportForm; 

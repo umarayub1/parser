@@ -89,6 +89,10 @@ function NewRequestPage() {
   // User credits state
   const [userCredits, setUserCredits] = useState(0);
   const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+  
+  // User plan state
+  const [userPlan, setUserPlan] = useState(null);
+  const [creditCostPerPage, setCreditCostPerPage] = useState(0.17);
 
   // --- Test State (kept from original for consistency) ---
   const [testFilePreviewUrl, setTestFilePreviewUrl] = useState(null);
@@ -124,30 +128,42 @@ function NewRequestPage() {
     };
   }, [dispatch, user]);
 
-  // Fetch user credits
+  // Fetch user credits and plan information
   useEffect(() => {
-    const fetchUserCredits = async () => {
+    const fetchUserData = async () => {
       if (!user) {
         setUserCredits(0); // Clear credits if no user
+        setUserPlan(null);
+        setCreditCostPerPage(0.17); // Default to basic plan rate
         return;
       }
       
       try {
         setIsLoadingCredits(true);
-        // Use apiClient to fetch credits
+        
+        // Fetch credits
         const credits = await apiClient.getCredits(); 
-        // The ApiClient.getCredits() method now directly returns the number of credits
-        // or throws an error if the fetch fails.
         setUserCredits(credits || 0);
+        
+        // Fetch user plan information
+        const plan = await apiClient.getUserPlan();
+        setUserPlan(plan);
+        
+        // Fetch credit cost per page based on user's plan
+        const costPerPage = await apiClient.getCreditCostPerPage();
+        setCreditCostPerPage(costPerPage);
+        
       } catch (err) {
-        console.error('Error fetching user credits via ApiClient:', err.message);
-        setUserCredits(0); // Set to 0 or handle error appropriately
+        console.error('Error fetching user data via ApiClient:', err.message);
+        setUserCredits(0);
+        setUserPlan(null);
+        setCreditCostPerPage(0.17); // Default to basic plan rate
       } finally {
         setIsLoadingCredits(false);
       }
     };
     
-    fetchUserCredits();
+    fetchUserData();
   }, [user]);
 
   // --- Functions moved from App.jsx ---
@@ -390,7 +406,7 @@ function NewRequestPage() {
       }
 
       // Check if user has enough credits
-      const requiredCredits = pageCount * 0.1;
+      const requiredCredits = pageCount * creditCostPerPage;
       if (userCredits < requiredCredits) {
           setError(`Not enough credits. You need ${requiredCredits.toFixed(1)} credits but have ${userCredits.toFixed(1)}. Please top up your credits.`);
           return;
@@ -609,7 +625,7 @@ function NewRequestPage() {
                    {user && !isLoading && (!parsingStatus || parsingStatus === 'pending' || parsingStatus === 'error' || parsingStatus === 'success') ? (
                      <button 
                        onClick={parsingStatus === 'success' ? resetState : triggerParsing} 
-                       disabled={parsingStatus !== 'success' && (pageCount === 0 || userCredits < (pageCount * 0.1))} 
+                       disabled={parsingStatus !== 'success' && (pageCount === 0 || userCredits < (pageCount * creditCostPerPage))} 
                        className="cta-button"
                        style={{fontSize: '1rem', padding: '12px 24px'}} // Natural button sizing
                      >
@@ -683,9 +699,12 @@ function NewRequestPage() {
                  <div className="file-info" style={{marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '5px', display: 'flex', alignItems: 'center'}}>
                    <div style={{flex: 1}}>
                      <p style={{...typographyStyles.text, margin: '0'}}><strong>File:</strong> {file.name}</p>
-                     <p style={{...typographyStyles.text, margin: '5px 0 0'}}><strong>Pages:</strong> {pageCount} ({(pageCount * 0.1).toFixed(1)} credits)</p>
-                     {pageCount > 0 && userCredits < (pageCount * 0.1) && (
-                       <p style={{...typographyStyles.text, margin: '5px 0 0', color: 'red'}}><strong>Not enough credits!</strong> You need {(pageCount * 0.1).toFixed(1)} credits but have {userCredits.toFixed(1)}. <a href="/top-up">Top up</a></p>
+                     <p style={{...typographyStyles.text, margin: '5px 0 0'}}><strong>Pages:</strong> {pageCount} ({(pageCount * creditCostPerPage).toFixed(1)} credits)</p>
+                     {userPlan && (
+                       <p style={{...typographyStyles.text, margin: '5px 0 0', color: '#666'}}><strong>Plan:</strong> {userPlan.name} ({creditCostPerPage.toFixed(2)} credits/page)</p>
+                     )}
+                     {pageCount > 0 && userCredits < (pageCount * creditCostPerPage) && (
+                       <p style={{...typographyStyles.text, margin: '5px 0 0', color: 'red'}}><strong>Not enough credits!</strong> You need {(pageCount * creditCostPerPage).toFixed(1)} credits but have {userCredits.toFixed(1)}. <a href="/top-up">Top up</a></p>
                      )}
                    </div>
                  </div>
