@@ -119,16 +119,22 @@ export const signInWithOAuthThunk = createAsyncThunk(
   'auth/signInWithOAuth',
   async ({ provider }, { rejectWithValue }) => {
     try {
-      // Get OAuth URL from our backend
-      const response = await ApiClient.googleSignIn();
+      // Import supabase client
+      const { supabase } = await import('../supabaseClient');
       
-      if (response.success && response.url) {
-        // Redirect to the OAuth provider
-        window.location.href = response.url;
-        return { redirected: true };
-      } else {
-        throw new Error('Failed to initiate OAuth sign in');
+      // Use Supabase SDK directly for OAuth sign-in
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: provider,
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`
+        }
+      });
+      
+      if (error) {
+        throw error;
       }
+      
+      return { redirected: true };
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -139,7 +145,22 @@ export const signOutThunk = createAsyncThunk(
   'auth/signOut',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      const response = await ApiClient.logout();
+      // Import supabase client
+      const { supabase } = await import('../supabaseClient');
+      
+      // Sign out using Supabase SDK
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Supabase sign out error:', error);
+      }
+      
+      // Also try to logout from backend (optional, don't fail if it doesn't work)
+      try {
+        await ApiClient.logout();
+      } catch (backendError) {
+        console.warn('Backend logout failed:', backendError);
+      }
       
       // Clear local state regardless of API success
       dispatch(setSession(null));

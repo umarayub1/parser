@@ -12,6 +12,7 @@ const config = {
   uploads: process.env.FILE_SIZE_LIMIT || '10mb',
   environment: process.env.NODE_ENV || 'development',
   appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:4000',
+  frontendUrl: process.env.FRONTEND_URL || process.env.VITE_APP_BASE_URL || 'http://localhost:5173',
   
   // LemonSqueezy configuration
   lemonSqueezy: {

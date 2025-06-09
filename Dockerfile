@@ -6,7 +6,7 @@ FROM node:20-alpine AS build
 ENV VITE_SUPABASE_URL=https://zxetedcvnlqapnpqnrid.supabase.co
 ENV VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4ZXRlZGN2bmxxYXBucHFucmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwNjkyNjcsImV4cCI6MjA1OTY0NTI2N30.E4BtILMqZYvOOl3X0qOEXIGbq_9JaJfJAAgssEsxu0o
 ENV VITE_APP_BASE_URL=https://parser-470443043814.asia-south2.run.app
-ENV VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=https://parser-470443043814.asia-south2.run.app/api
 
 WORKDIR /app
 

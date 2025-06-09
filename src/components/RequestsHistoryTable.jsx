@@ -90,6 +90,7 @@ function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
   const [error, setError] = useState('');
   const [selectedRequests, setSelectedRequests] = useState(new Set());
   const [isExporting, setIsExporting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (isLoading) {
     return (
@@ -291,7 +292,7 @@ function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
       return;
     }
 
-    setIsExporting(true); // Reuse the same loading state
+    setIsDeleting(true);
     setError('');
 
     try {
@@ -339,7 +340,7 @@ function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
       console.error('Bulk delete error:', error);
       setError(`Delete failed: ${error.message}`);
     } finally {
-      setIsExporting(false);
+      setIsDeleting(false);
     }
   };
 
@@ -418,10 +419,10 @@ function RequestsHistoryTable({ requests, isLoading, onRequestUpdate }) {
             <button
               className={`bulk-delete-button ${selectedRequests.size === 0 ? 'disabled' : ''}`}
               onClick={handleBulkDelete}
-              disabled={selectedRequests.size === 0 || isExporting}
+              disabled={selectedRequests.size === 0 || isDeleting}
               title={selectedRequests.size === 0 ? 'Select requests to delete' : `Delete ${selectedRequests.size} request${selectedRequests.size !== 1 ? 's' : ''}`}
             >
-              {isExporting ? (
+              {isDeleting ? (
                 <>
                   <div className="action-spinner"></div>
                   Processing...

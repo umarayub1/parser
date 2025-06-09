@@ -178,12 +178,17 @@
 
 .file-info {
   flex: 1;
+  min-width: 0; /* Allow flex item to shrink below content size */
 }
 
 .file-name {
   font-weight: 500;
   color: #111827;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .file-details {
@@ -253,13 +258,18 @@
 
 .cancel-button,
 .submit-button {
-  padding: 10px 20px;
+  padding: 12px 24px;
   border-radius: 8px;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
+  min-width: 120px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .cancel-button {
@@ -333,5 +343,6 @@
   .cancel-button,
   .submit-button {
     width: 100%;
+    min-width: unset;
   }
 } 

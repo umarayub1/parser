@@ -18,8 +18,8 @@ const LoginPage = () => {
   // Single redirection effect based on session state
   useEffect(() => {
     if (session) {
-      console.log("Session detected, redirecting to new-request");
-      navigate('/new-request');
+      console.log("Session detected, redirecting to requests");
+      navigate('/requests');
     }
   }, [session, navigate]);
   
@@ -64,7 +64,7 @@ const LoginPage = () => {
   
   // If already logged in, show loading or redirect immediately
   if (session) {
-    return <Navigate to="/new-request" />;
+    return <Navigate to="/requests" />;
   }
   
   return (

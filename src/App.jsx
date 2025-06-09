@@ -15,6 +15,7 @@ import ProfilePage from './pages/ProfilePage';
 import ContactPage from './pages/ContactPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 import ApiDocsPage from './pages/ApiDocsPage';
 import ApiExamplesPage from './pages/ApiExamplesPage';
 import LandingPage from './pages/LandingPage';
@@ -53,6 +54,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="*" element={<LandingPage />} />
           </Routes>
