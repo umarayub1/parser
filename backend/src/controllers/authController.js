@@ -1,4 +1,4 @@
-import supabase, { supabaseAdmin } from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 import config from '../config/index.js';
 import { getUserCurrentPlan } from '../services/planService.js';
 
@@ -17,7 +17,7 @@ export const signup = async (req, res) => {
     }
     
     // Create user in Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabaseAdmin.auth.signUp({
       email,
       password,
       options: {
@@ -74,7 +74,7 @@ export const login = async (req, res) => {
     }
     
     // Sign in with Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email,
       password
     });
@@ -101,7 +101,7 @@ export const login = async (req, res) => {
 export const googleSignIn = async (req, res) => {
   try {
     // Get the URL for Google OAuth sign-in
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabaseAdmin.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: req.body.redirectUrl || config.frontendUrl
@@ -159,7 +159,7 @@ export const logout = async (req, res) => {
     }
     
     // Sign out with Supabase Auth
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabaseAdmin.auth.signOut();
     
     if (error) throw error;
     
@@ -190,7 +190,7 @@ export const getUser = async (req, res) => {
     }
     
     // Get extended user profile from database if needed
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('id', req.user.id)

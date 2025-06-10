@@ -1,4 +1,4 @@
-import supabase, { supabaseAdmin } from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 import { calculateCreditCost } from '../services/planService.js';
 import config from '../config/index.js';
 import { Resend } from 'resend';
@@ -29,7 +29,7 @@ export const parseBankStatement = async (req, res) => {
     }
 
     // 1. Get user ID and page count from the request record
-    const { data: requestData, error: requestError } = await supabase
+    const { data: requestData, error: requestError } = await supabaseAdmin
       .from('requests')
       .select('user_id, page_count')
       .eq('id', requestId)
@@ -43,7 +43,7 @@ export const parseBankStatement = async (req, res) => {
     }
 
     if (requestData.page_count === null || requestData.page_count === undefined || requestData.page_count <= 0) {
-      await supabase
+      await supabaseAdmin
         .from('requests')
         .update({ 
           parsing_status: 'error', 
@@ -79,7 +79,7 @@ export const parseBankStatement = async (req, res) => {
       const errorMessage = `Insufficient credits. This action requires ${creditCost} credits, but you only have ${profileData?.credits_remaining || 0}. Please purchase more credits.`;
       
       // Update request status to error due to insufficient credits
-      await supabase
+      await supabaseAdmin
         .from('requests')
         .update({ 
           parsing_status: 'error', 
@@ -94,7 +94,7 @@ export const parseBankStatement = async (req, res) => {
     }
 
     // 3. Create payment record
-    const { error: paymentError } = await supabase
+    const { error: paymentError } = await supabaseAdmin
       .from('payments')
       .insert({
         user_id: requestData.user_id,
@@ -111,7 +111,7 @@ export const parseBankStatement = async (req, res) => {
 
     if (paymentError) {
       console.error(`Failed to create payment record for request ${requestId}: ${paymentError.message}`);
-      await supabase
+      await supabaseAdmin
         .from('requests')
         .update({ 
           parsing_status: 'error', 
@@ -136,7 +136,7 @@ export const parseBankStatement = async (req, res) => {
 
     if (creditDeductionError) {
       console.error(`Failed to deduct credits for user ${requestData.user_id}: ${creditDeductionError.message}`);
-      await supabase
+      await supabaseAdmin
         .from('requests')
         .update({
           parsing_status: 'error',
@@ -151,11 +151,11 @@ export const parseBankStatement = async (req, res) => {
     }
 
     // 5. Update DB Status: Submitting
-    await supabase.from('requests').update({ parsing_status: 'submitting' }).eq('id', requestId);
+    await supabaseAdmin.from('requests').update({ parsing_status: 'submitting' }).eq('id', requestId);
 
     // 6. Download file from Storage
     console.log(`SUBMIT: Downloading ${storagePath} for request ${requestId}`);
-    const { data: blobData, error: downloadError } = await supabase.storage.from('statement-uploads').download(storagePath);
+    const { data: blobData, error: downloadError } = await supabaseAdmin.storage.from('statement-uploads').download(storagePath);
     
     if (downloadError) {
       return res.status(500).json({
@@ -208,7 +208,7 @@ export const parseBankStatement = async (req, res) => {
       const errorBody = await response.text();
       console.error(`SUBMIT: Parsing API submission error (${response.status}): ${errorBody}`);
       
-      await supabase.from('requests').update({ 
+      await supabaseAdmin.from('requests').update({ 
         parsing_status: 'error', 
         error_message: `API submission failed: Status ${response.status}` 
       }).eq('id', requestId);
@@ -229,7 +229,7 @@ export const parseBankStatement = async (req, res) => {
 
     // 11. Update DB: Mark as PROCESSING (waiting for callback) and store credits consumed
     console.log(`SUBMIT: Job submitted successfully for Request ID: ${requestId}. Waiting for callback.`);
-    await supabase
+    await supabaseAdmin
       .from('requests')
       .update({
         parsing_status: 'processing',
@@ -252,7 +252,7 @@ export const parseBankStatement = async (req, res) => {
     try {
       const { requestId } = req.body;
       if (requestId) {
-        await supabase
+        await supabaseAdmin
           .from('requests')
           .update({ 
             parsing_status: 'error', 
@@ -317,7 +317,7 @@ export const handleParsingResult = async (req, res) => {
 
     // 4. Fetch the Request Record BEFORE updating
     console.log(`CALLBACK: Fetching current request data for ${requestId}...`);
-    const { data: currentRequest, error: fetchError } = await supabase
+    const { data: currentRequest, error: fetchError } = await supabaseAdmin
       .from('requests')
       .select('id, user_id, file_name')
       .eq('id', requestId)
@@ -365,7 +365,7 @@ export const handleParsingResult = async (req, res) => {
 
     // 6. Update Database
     console.log(`CALLBACK: Updating request ${requestId} to status '${finalStatus}'`);
-    const { error: dbError } = await supabase
+    const { error: dbError } = await supabaseAdmin
       .from('requests')
       .update(dbUpdateData)
       .eq('id', requestId);
@@ -393,7 +393,7 @@ export const handleParsingResult = async (req, res) => {
           try {
             // Fetch User Email
             console.log(`CALLBACK: Fetching email for user ID: ${currentRequest.user_id}`);
-            const { data: userData, error: userError } = await supabase
+            const { data: userData, error: userError } = await supabaseAdmin
               .from('requests')
               .select('user_email')
               .eq('user_id', currentRequest.user_id)
@@ -519,7 +519,7 @@ export const createNowpaymentsInvoice = async (req, res) => {
     const invoiceData = await response.json();
     
     // Create payment record in database
-    const { error: paymentError } = await supabase
+    const { error: paymentError } = await supabaseAdmin
       .from('payments')
       .insert({
         user_id: userId,
@@ -593,7 +593,7 @@ export const handleNowpaymentsIpn = async (req, res) => {
     const userId = orderIdParts[2];
     
     // Update the payment status in the database
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('payments')
       .update({
         status: payment_status === 'confirmed' ? 'completed' : payment_status,
@@ -675,7 +675,7 @@ export const simulatePaymentSuccess = async (req, res) => {
     }
     
     // 1. Create a payment record
-    const { data: paymentData, error: paymentError } = await supabase
+    const { data: paymentData, error: paymentError } = await supabaseAdmin
       .from('payments')
       .insert({
         user_id: userId,

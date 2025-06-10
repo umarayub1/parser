@@ -2,7 +2,7 @@ import fs from 'fs';
 import FormData from 'form-data';
 import axios from 'axios';
 import { PDFDocument } from 'pdf-lib';
-import supabase from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 import { logApiRequest } from '../utils/logUtils.js';
 import config from '../config/index.js';
 import { calculateCreditCost } from '../services/planService.js';
@@ -69,7 +69,7 @@ export async function parsePdf(req, res) {
       }
       
       // Create request entry in database
-      const { data: requestData, error: requestError } = await supabase
+      const { data: requestData, error: requestError } = await supabaseAdmin
         .from('requests')
         .insert({
           user_id: userId,
@@ -96,7 +96,7 @@ export async function parsePdf(req, res) {
       const creditCost = Math.max(1, creditCalculation.total_credits);
       
       // Deduct credits
-      const { error: creditDeductionError } = await supabase
+      const { error: creditDeductionError } = await supabaseAdmin
         .rpc('deduct_credits', {
           user_id_input: userId,
           amount_input: creditCost
@@ -107,7 +107,7 @@ export async function parsePdf(req, res) {
       }
 
       // Update request status and store credits consumed
-      await supabase
+      await supabaseAdmin
         .from('requests')
         .update({ 
           parsing_status: 'submitting',
@@ -154,7 +154,7 @@ export async function parsePdf(req, res) {
         });
         
         // Update request status to processing (credits_consumed already set above)
-        await supabase
+        await supabaseAdmin
           .from('requests')
           .update({
             parsing_status: 'processing',
@@ -164,7 +164,7 @@ export async function parsePdf(req, res) {
           .eq('id', requestId);
       } catch (apiError) {
         const errorBody = apiError.response?.data || apiError.message;
-        await supabase
+        await supabaseAdmin
           .from('requests')
           .update({ 
             parsing_status: 'error', 
@@ -309,7 +309,7 @@ export async function getParseStatus(req, res) {
     const { requestId } = req.params;
     
     // Get request data
-    const { data: requestData, error: requestError } = await supabase
+    const { data: requestData, error: requestError } = await supabaseAdmin
       .from('requests')
       .select('id, parsing_status, error_message, created_at, parsing_started_at, parsing_completed_at, file_name')
       .eq('id', requestId)
@@ -336,7 +336,7 @@ export async function getParseStatus(req, res) {
     // If parsing is complete, include parsed data in the response
     let parsedData = null;
     if (isComplete) {
-      const { data: fullRequestData, error: fullRequestError } = await supabase
+      const { data: fullRequestData, error: fullRequestError } = await supabaseAdmin
         .from('requests')
         .select('parsed_data')
         .eq('id', requestId)

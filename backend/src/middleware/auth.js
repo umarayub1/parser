@@ -1,5 +1,5 @@
-import supabase from '../services/supabase.js';
 import { validateApiKey } from '../utils/apiKeyUtils.js';
+import { supabaseAdmin } from '../services/supabase.js';
 
 /**
  * Get the user from the session token
@@ -11,7 +11,7 @@ export async function getUserFromSession(sessionToken) {
   
   try {
     // Get user from session token
-    const { data: { user }, error } = await supabase.auth.getUser(sessionToken);
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(sessionToken);
     
     if (error) {
       console.error('Error getting user from session:', error?.message || error);

@@ -1,4 +1,4 @@
-import supabase from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 
 /**
  * Log API request details
@@ -16,7 +16,7 @@ export async function logApiRequest(
   errorMessage
 ) {
   try {
-    await supabase.from('api_requests').insert({
+    await supabaseAdmin.from('api_requests').insert({
       api_key_id: apiKeyId,
       user_id: userId,
       endpoint,

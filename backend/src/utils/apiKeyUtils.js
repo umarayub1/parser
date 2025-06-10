@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import supabase from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 
 /**
  * Securely compare API keys
@@ -39,7 +39,7 @@ export async function validateApiKey(apiKeyHeader) {
   }
 
   // Look up key in database
-  const { data: apiKeyData, error } = await supabase
+  const { data: apiKeyData, error } = await supabaseAdmin
     .from('api_keys')
     .select('id, user_id, key_hash')
     .eq('key_prefix', keyPrefix)
@@ -59,7 +59,7 @@ export async function validateApiKey(apiKeyHeader) {
   }
   
   // Update last_used_at timestamp
-  await supabase
+  await supabaseAdmin
     .from('api_keys')
     .update({ last_used_at: new Date().toISOString() })
     .eq('id', apiKeyData.id);

@@ -1,4 +1,4 @@
-import supabase from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 import { generateApiKey } from '../utils/apiKeyUtils.js';
 
 /**
@@ -32,7 +32,7 @@ export async function createApiKey(req, res) {
     }
     
     // Save key to database
-    const { error: insertError } = await supabase
+    const { error: insertError } = await supabaseAdmin
       .from('api_keys')
       .insert({
         name: name.trim(),
@@ -72,7 +72,7 @@ export async function createApiKey(req, res) {
 export async function listApiKeys(req, res) {
   try {
     const userId = req.user.id;
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('api_keys')
       .select('id, name, key_prefix, created_at, last_used_at, expires_at, is_active')
       .eq('user_id', userId)
@@ -107,7 +107,7 @@ export async function updateApiKey(req, res) {
     const userId = req.user.id;
     
     // Check if the key belongs to the user
-    const { data: keyData, error: fetchError } = await supabase
+    const { data: keyData, error: fetchError } = await supabaseAdmin
       .from('api_keys')
       .select('id')
       .eq('id', keyId)
@@ -122,7 +122,7 @@ export async function updateApiKey(req, res) {
     }
     
     // Update the key
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('api_keys')
       .update({ 
         is_active: !!is_active,
@@ -158,7 +158,7 @@ export async function deleteApiKey(req, res) {
     const userId = req.user.id;
     
     // Check if the key belongs to the user
-    const { data: keyData, error: fetchError } = await supabase
+    const { data: keyData, error: fetchError } = await supabaseAdmin
       .from('api_keys')
       .select('id')
       .eq('id', keyId)
@@ -173,7 +173,7 @@ export async function deleteApiKey(req, res) {
     }
     
     // Delete the key
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseAdmin
       .from('api_keys')
       .delete()
       .eq('id', keyId);
@@ -213,7 +213,7 @@ export async function verifyApiKey(req, res) {
   const { isValid, userId, apiKeyId } = req;
   
   // Get key details
-  const { data: keyData, error: keyError } = await supabase
+  const { data: keyData, error: keyError } = await supabaseAdmin
     .from('api_keys')
     .select('name, key_prefix, created_at, last_used_at, expires_at')
     .eq('id', apiKeyId)
@@ -227,7 +227,7 @@ export async function verifyApiKey(req, res) {
   }
   
   // Get user details
-  const { data: userData, error: userError } = await supabase
+  const { data: userData, error: userError } = await supabaseAdmin
     .from('profiles')
     .select('email, full_name')
     .eq('id', userId)

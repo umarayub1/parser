@@ -1,4 +1,4 @@
-import supabase from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 
 /**
  * Submit a support/contact form
@@ -40,7 +40,7 @@ export const submitSupportRequest = async (req, res) => {
     }
 
     // Submit to Supabase contact_messages table
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('contact_messages')
       .insert([messageData])
       .select()
@@ -80,7 +80,7 @@ export const getUserSupportRequests = async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('contact_messages')
       .select('id, subject, category, created_at, message')
       .eq('user_id', userId)

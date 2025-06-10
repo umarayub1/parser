@@ -1,4 +1,4 @@
-import supabase from '../services/supabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 import { executeQuery } from '../utils/database.js';
 import fs from 'fs';
 
@@ -44,7 +44,7 @@ export const getRequestById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('requests')
       .select('*')
       .eq('id', id)
@@ -87,7 +87,7 @@ export const createRequest = async (req, res) => {
       user_id: userId
     };
     
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('requests')
       .insert(insertData)
       .select('id')
@@ -119,7 +119,7 @@ export const updateRequest = async (req, res) => {
     const updateData = req.body;
     
     // First check if the request belongs to this user
-    const { data: existingRequest, error: checkError } = await supabase
+    const { data: existingRequest, error: checkError } = await supabaseAdmin
       .from('requests')
       .select('id')
       .eq('id', id)
@@ -133,7 +133,7 @@ export const updateRequest = async (req, res) => {
       });
     }
     
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('requests')
       .update(updateData)
       .eq('id', id);
@@ -160,7 +160,7 @@ export const deleteRequest = async (req, res) => {
     const userId = req.user.id;
     
     // First check if the request belongs to this user
-    const { data: existingRequest, error: checkError } = await supabase
+    const { data: existingRequest, error: checkError } = await supabaseAdmin
       .from('requests')
       .select('id')
       .eq('id', id)
@@ -175,7 +175,7 @@ export const deleteRequest = async (req, res) => {
     }
     
     // Soft delete by setting is_deleted to true
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('requests')
       .update({ is_deleted: true })
       .eq('id', id);
@@ -217,7 +217,7 @@ export const uploadToStorage = async (req, res) => {
     const filePath = `user_statements/${requestId}_${Date.now()}_${req.file.originalname}`;
     
     // Check if the request belongs to this user
-    const { data: existingRequest, error: checkError } = await supabase
+    const { data: existingRequest, error: checkError } = await supabaseAdmin
       .from('requests')
       .select('id')
       .eq('id', requestId)
@@ -232,7 +232,7 @@ export const uploadToStorage = async (req, res) => {
     }
     
     // Update request record with storage path
-    await supabase
+    await supabaseAdmin
       .from('requests')
       .update({
         storage_path: filePath,
@@ -244,7 +244,7 @@ export const uploadToStorage = async (req, res) => {
     const fileBuffer = fs.readFileSync(req.file.path);
     
     // Upload to Supabase Storage
-    const { error: uploadError } = await supabase
+    const { error: uploadError } = await supabaseAdmin
       .storage
       .from('statement-uploads')
       .upload(filePath, fileBuffer);
@@ -288,7 +288,7 @@ export const invokeFunction = async (req, res) => {
     if (body.requestId) {
       const userId = req.user.id;
       
-      const { data: existingRequest, error: checkError } = await supabase
+      const { data: existingRequest, error: checkError } = await supabaseAdmin
         .from('requests')
         .select('id')
         .eq('id', body.requestId)
