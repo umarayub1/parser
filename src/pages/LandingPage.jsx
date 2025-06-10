@@ -9,7 +9,7 @@ const LandingPage = () => {
       <section className="hero-section">
         <div className="hero-content">
           <h1 className="hero-title">
-            Transform Your <span className="highlight">Bank Statements</span> into <span className="highlight-secondary">Actionable Insights</span>
+            Transform Your <span className="highlight">Bank Statements</span> into <span className="highlight-secondary">Smart Business Decisions</span>
           </h1>
           <p className="hero-subtitle">
             Effortlessly extract, categorize, and analyze your financial data with our AI-powered statement parser

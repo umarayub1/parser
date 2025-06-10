@@ -102,40 +102,44 @@ const Header = ({ mobileNavOpen, setMobileNavOpen }) => {
           </div>
           
           <div className="header-controls">
-            {user && (
-              <div className="nav-links">
-                <Link to="/requests" className={`nav-link ${isActive('/requests') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                  </svg>
-                  <span className="nav-text">Requests</span>
-                </Link>
-                <Link to="/subscriptions" className={`nav-link ${isActive('/subscriptions') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                    <path d="M2 17l10 5 10-5"></path>
-                    <path d="M2 12l10 5 10-5"></path>
-                  </svg>
-                  <span className="nav-text">Subscriptions</span>
-                </Link>
-                <Link to="/api-docs" className={`nav-link ${isActive('/api-docs') || isActive('/api-examples') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-                    <polyline points="13 2 13 9 20 9"></polyline>
-                  </svg>
-                  <span className="nav-text">API</span>
-                </Link>
-                <Link to="/support" className={`nav-link ${isActive('/support') ? 'active' : ''}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                  </svg>
-                  <span className="nav-text">Support</span>
-                </Link>
-              </div>
-            )}
+            <div className="nav-links">
+              {user ? (
+                <>
+                  <Link to="/requests" className={`nav-link ${isActive('/requests') ? 'active' : ''}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="16" y1="2" x2="16" y2="6"></line>
+                      <line x1="8" y1="2" x2="8" y2="6"></line>
+                      <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <span className="nav-text">Requests</span>
+                  </Link>
+                  <Link to="/subscriptions" className={`nav-link ${isActive('/subscriptions') ? 'active' : ''}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                      <path d="M2 17l10 5 10-5"></path>
+                      <path d="M2 12l10 5 10-5"></path>
+                    </svg>
+                    <span className="nav-text">Subscriptions</span>
+                  </Link>
+                  <Link to="/api-docs" className={`nav-link ${isActive('/api-docs') || isActive('/api-examples') ? 'active' : ''}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                      <polyline points="13 2 13 9 20 9"></polyline>
+                    </svg>
+                    <span className="nav-text">API</span>
+                                    </Link>
+                </>
+              ) : null}
+               
+               {/* Support link - always visible */}
+              <Link to="/support" className={`nav-link ${isActive('/support') ? 'active' : ''}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+                <span className="nav-text">Support</span>
+              </Link>
+            </div>
             
             {/* Add hamburger menu for mobile */}
             <div 
@@ -224,6 +228,9 @@ const Header = ({ mobileNavOpen, setMobileNavOpen }) => {
                   <Link to="/login" className="auth-button login">
                     Log In
                   </Link>
+                  <Link to="/signup" className="auth-button signup">
+                    Sign Up
+                  </Link>
                 </div>
               )}
             </div>
@@ -251,33 +258,38 @@ const Header = ({ mobileNavOpen, setMobileNavOpen }) => {
         )}
         
         <div className="mobile-nav-links">
-          <Link to="/requests" className={`mobile-nav-link ${isActive('/requests') ? 'active' : ''}`} onClick={toggleMobileNav}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            Requests
-          </Link>
+          {user ? (
+            <>
+              <Link to="/requests" className={`mobile-nav-link ${isActive('/requests') ? 'active' : ''}`} onClick={toggleMobileNav}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                Requests
+              </Link>
+              
+              <Link to="/subscriptions" className={`mobile-nav-link ${isActive('/subscriptions') ? 'active' : ''}`} onClick={toggleMobileNav}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                  <path d="M2 17l10 5 10-5"></path>
+                  <path d="M2 12l10 5 10-5"></path>
+                </svg>
+                Subscriptions
+              </Link>
+              
+              <Link to="/api-docs" className={`mobile-nav-link ${isActive('/api-docs') ? 'active' : ''}`} onClick={toggleMobileNav}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                  <polyline points="13 2 13 9 20 9"></polyline>
+                </svg>
+                API
+              </Link>
+            </>
+          ) : null}
           
-          <Link to="/subscriptions" className={`mobile-nav-link ${isActive('/subscriptions') ? 'active' : ''}`} onClick={toggleMobileNav}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-              <path d="M2 17l10 5 10-5"></path>
-              <path d="M2 12l10 5 10-5"></path>
-            </svg>
-            Subscriptions
-          </Link>
-          
-          <Link to="/api-docs" className={`mobile-nav-link ${isActive('/api-docs') ? 'active' : ''}`} onClick={toggleMobileNav}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-              <polyline points="13 2 13 9 20 9"></polyline>
-            </svg>
-            API
-          </Link>
-          
+          {/* Support link - always visible */}
           <Link to="/support" className={`mobile-nav-link ${isActive('/support') ? 'active' : ''}`} onClick={toggleMobileNav}>
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
@@ -312,6 +324,13 @@ const Header = ({ mobileNavOpen, setMobileNavOpen }) => {
               onClick={toggleMobileNav}
             >
               Log In
+            </Link>
+            <Link 
+              to="/signup" 
+              className="auth-button signup" 
+              onClick={toggleMobileNav}
+            >
+              Sign Up
             </Link>
           </div>
         )}

@@ -235,16 +235,8 @@ const SupportPage = () => {
               <span style={styles.contactIcon}>📧</span>
               <div>
                 <h4 style={styles.contactMethodTitle}>Email</h4>
-                <p style={styles.contactMethodText}>support@yourcompany.com</p>
+                <p style={styles.contactMethodText}>ramish@parselab.co</p>
                 <p style={styles.contactMethodNote}>Response within 24 hours</p>
-              </div>
-            </div>
-            <div style={styles.contactMethod}>
-              <span style={styles.contactIcon}>💬</span>
-              <div>
-                <h4 style={styles.contactMethodTitle}>Live Chat</h4>
-                <p style={styles.contactMethodText}>Available Mon-Fri 9 AM - 6 PM</p>
-                <p style={styles.contactMethodNote}>Click the chat icon in the bottom right</p>
               </div>
             </div>
           </div>
@@ -396,7 +388,8 @@ const styles = {
   quickContact: {
     background: '#f8f9fa',
     borderRadius: '12px',
-    padding: '30px'
+    padding: '30px',
+    textAlign: 'center'
   },
   quickContactTitle: {
     fontSize: '20px',
@@ -406,8 +399,8 @@ const styles = {
     margin: '0 0 20px 0'
   },
   contactMethods: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    display: 'flex',
+    justifyContent: 'center',
     gap: '20px'
   },
   contactMethod: {
