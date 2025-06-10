@@ -1,4 +1,4 @@
-import supabase from '../services/supabase.js';
+import supabase, { supabaseAdmin } from '../services/supabase.js';
 import { calculateCreditCost } from '../services/planService.js';
 import config from '../config/index.js';
 import { Resend } from 'resend';
@@ -62,7 +62,7 @@ export const parseBankStatement = async (req, res) => {
     const creditCost = creditCalculation.total_credits;
     
     // 2. Check if user has enough credits
-    const { data: profileData, error: profileError } = await supabase
+    const { data: profileData, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('credits_remaining')
       .eq('id', requestData.user_id)
@@ -126,7 +126,7 @@ export const parseBankStatement = async (req, res) => {
     }
 
     // 4. Deduct the calculated credits from the user's account
-    const { error: creditDeductionError } = await supabase
+    const { error: creditDeductionError } = await supabaseAdmin
       .from('profiles')
       .update({ 
         credits_remaining: profileData.credits_remaining - creditCost,
@@ -612,7 +612,7 @@ export const handleNowpaymentsIpn = async (req, res) => {
       const creditsToAdd = parseFloat(price_amount) * 10;
       
       // Get current user credits
-      const { data: userData, error: userError } = await supabase
+      const { data: userData, error: userError } = await supabaseAdmin
         .from('profiles')
         .select('credits_remaining')
         .eq('id', userId)
@@ -625,7 +625,7 @@ export const handleNowpaymentsIpn = async (req, res) => {
       
       // Add credits to user account
       const newCreditBalance = (userData.credits_remaining || 0) + creditsToAdd;
-      const { error: creditError } = await supabase
+      const { error: creditError } = await supabaseAdmin
         .from('profiles')
         .update({
           credits_remaining: newCreditBalance,
@@ -702,7 +702,7 @@ export const simulatePaymentSuccess = async (req, res) => {
     const creditsToAdd = parseFloat(amount) * 10;
     
     // 3. Get current user credits
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseAdmin
       .from('profiles')
       .select('credits_remaining')
       .eq('id', userId)
@@ -720,7 +720,7 @@ export const simulatePaymentSuccess = async (req, res) => {
     const newCreditBalance = currentCredits + creditsToAdd;
     
     // 4. Update user credits
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({
         credits_remaining: newCreditBalance,

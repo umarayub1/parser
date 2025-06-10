@@ -61,8 +61,16 @@ const SessionManager = () => {
           dispatch(setSession(null));
           dispatch(setUser(null));
           
-          // Clear auth token from localStorage
+          // Clear auth token from localStorage and any cached data
           localStorage.removeItem('auth_token');
+          
+          // Clear any other auth-related localStorage items
+          try {
+            localStorage.removeItem('credits_updated');
+          } catch (e) {
+            // Ignore errors
+          }
+          
           console.log('Auth token removed from localStorage on sign out');
           
           // Navigate to login if not on public pages

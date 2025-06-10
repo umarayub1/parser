@@ -13,8 +13,13 @@ export async function getUserFromSession(sessionToken) {
     // Get user from session token
     const { data: { user }, error } = await supabase.auth.getUser(sessionToken);
     
-    if (error || !user) {
-      console.error('Error getting user from session:', error);
+    if (error) {
+      console.error('Error getting user from session:', error?.message || error);
+      return { user: null, session: null };
+    }
+    
+    if (!user) {
+      console.log('No user found for session token');
       return { user: null, session: null };
     }
     
@@ -57,6 +62,13 @@ export async function authenticateUser(req, res, next) {
     return res.status(401).json({ 
       success: false, 
       error: 'Invalid or expired session' 
+    });
+  }
+  
+  if (!session) {
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Session could not be established' 
     });
   }
   

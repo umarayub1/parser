@@ -100,8 +100,10 @@ class ApiClient {
       }
     }
     
-    // Clear local storage token
+    // Clear local storage token and invalidate cache
     localStorage.removeItem('auth_token');
+    this.invalidateCache('session');
+    this.invalidateCache('credits');
     
     return { success: true };
   }
@@ -618,7 +620,8 @@ class ApiClient {
       // Check cache first
       const now = Date.now();
       if (apiCache.session.value !== null && 
-          (now - apiCache.session.timestamp) < apiCache.session.expiresIn) {
+          (now - apiCache.session.timestamp) < apiCache.session.expiresIn &&
+          apiCache.session.value.success) {
         console.log('ApiClient: Using cached session');
         return apiCache.session.value;
       }
@@ -663,9 +666,10 @@ class ApiClient {
             credit_cost_per_page: data.credit_cost_per_page || 0.17
           };
         } else {
-          // If session is invalid, clear token and redirect to login
+          // If session is invalid, clear token and invalidate cache
           localStorage.removeItem('auth_token');
-          result = { success: false, error: 'Invalid or expired session' };
+          this.invalidateCache('session');
+          result = { success: false, error: data.error || 'Invalid or expired session' };
           
           // If we're in a browser environment, redirect to login
           if (typeof window !== 'undefined' && window.location) {
@@ -683,6 +687,13 @@ class ApiClient {
         return result;
       } catch (error) {
         console.error('Error getting session:', error);
+        
+        // If it's a network error, don't cache the failure
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          console.log('ApiClient: Network error, not caching failure');
+          return { success: false, error: 'Network error, please try again' };
+        }
+        
         const result = { success: false, error: error.message };
         
         // Update cache with error result

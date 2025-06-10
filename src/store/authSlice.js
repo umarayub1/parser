@@ -95,6 +95,7 @@ export const getSessionThunk = createAsyncThunk(
             }
           } catch (userError) {
             console.error("Failed to fetch user details:", userError);
+            // Don't fail the session if user details fail, session is still valid
           }
         }
         
