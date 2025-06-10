@@ -3,11 +3,12 @@ set -e
 
 # Create log dirs if they don't exist
 mkdir -p /var/log/nginx
+mkdir -p /var/log/backend
 
 echo "Starting backend server..."
-# Start the backend server in the background
+# Start the backend server in the background with logs redirected to files
 cd /app/backend
-npm start &
+npm start > /var/log/backend/stdout.log 2> /var/log/backend/stderr.log &
 BACKEND_PID=$!
 
 # Function to check if backend is ready
@@ -56,14 +57,25 @@ fi
 
 echo "All services started successfully"
 
-# Start watching the nginx logs and forward them to stdout/stderr
+# Start watching the logs and forward them to stdout/stderr
+echo "=== NGINX ACCESS LOGS ==="
 tail -f /var/log/nginx/access.log &
 TAIL_ACCESS_PID=$!
+
+echo "=== NGINX ERROR LOGS ==="
 tail -f /var/log/nginx/error.log >&2 &
 TAIL_ERROR_PID=$!
 
+echo "=== BACKEND STDOUT LOGS ==="
+tail -f /var/log/backend/stdout.log &
+TAIL_BACKEND_STDOUT_PID=$!
+
+echo "=== BACKEND STDERR LOGS ==="
+tail -f /var/log/backend/stderr.log >&2 &
+TAIL_BACKEND_STDERR_PID=$!
+
 # Trap SIGTERM to propagate it to children so container can exit gracefully
-trap 'echo "Shutting down..."; kill -TERM $TAIL_ACCESS_PID $TAIL_ERROR_PID $BACKEND_PID 2>/dev/null || true; nginx -s quit; wait' TERM INT
+trap 'echo "Shutting down..."; kill -TERM $TAIL_ACCESS_PID $TAIL_ERROR_PID $TAIL_BACKEND_STDOUT_PID $TAIL_BACKEND_STDERR_PID $BACKEND_PID 2>/dev/null || true; nginx -s quit; wait' TERM INT
 
 # Wait for all processes
-wait $TAIL_ACCESS_PID $TAIL_ERROR_PID 
+wait $TAIL_ACCESS_PID $TAIL_ERROR_PID $TAIL_BACKEND_STDOUT_PID $TAIL_BACKEND_STDERR_PID 
