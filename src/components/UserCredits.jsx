@@ -5,27 +5,13 @@ import { selectUser } from '../store/authSlice';
 import ApiClient from './ApiClient';
 import './UserCredits.css';
 
-// Create a debounce helper function
-const debounce = (func, wait) => {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-};
-
 function UserCredits() {
   const [credits, setCredits] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState(0);
   const user = useSelector(selectUser);
   
   // Create a memoized refresh function
-  const refreshCredits = useCallback(async (forceRefresh = false) => {
+  const refreshCredits = useCallback(async () => {
     if (!user) {
       setIsLoading(false);
       return;
@@ -33,9 +19,8 @@ function UserCredits() {
     
     try {
       setIsLoading(true);
-      const credits = await ApiClient.getCredits(forceRefresh);
+      const credits = await ApiClient.getCredits();
       setCredits(credits || 0);
-      setLastRefresh(Date.now());
     } catch (err) {
       console.error('Error fetching user credits:', err);
       setCredits(0);
@@ -43,12 +28,6 @@ function UserCredits() {
       setIsLoading(false);
     }
   }, [user]);
-
-  // Debounced version of refresh
-  const debouncedRefresh = useCallback(
-    debounce(() => refreshCredits(false), 300),
-    [refreshCredits]
-  );
 
   // Initial fetch
   useEffect(() => {
@@ -60,7 +39,7 @@ function UserCredits() {
         return;
       }
       
-      await refreshCredits(false);
+      await refreshCredits();
     };
     
     fetchInitialCredits();
@@ -69,40 +48,6 @@ function UserCredits() {
       isMounted = false;
     };
   }, [user?.id, refreshCredits]);
-
-  // Listen for page visibility changes to refresh credits when user returns
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden && user) {
-        const timeSinceLastRefresh = Date.now() - lastRefresh;
-        // Only refresh if it's been more than 30 seconds since last refresh
-        if (timeSinceLastRefresh > 30000) {
-          debouncedRefresh();
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [user, lastRefresh, debouncedRefresh]);
-
-  // Listen for storage events to refresh credits when another tab updates them
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === 'credits_updated' && user) {
-        debouncedRefresh();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [user, debouncedRefresh]);
 
   if (!user) {
     return null;

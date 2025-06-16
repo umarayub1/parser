@@ -25,7 +25,7 @@ function SubscriptionPage() {
         setIsLoading(true);
         try {
           // Fetch user credits from API
-          const userCredits = await apiClient.getCredits(true); // Force refresh
+          const userCredits = await apiClient.getCredits();
           setCredits(userCredits);
           
           // Fetch current subscription if any
@@ -136,7 +136,7 @@ function SubscriptionPage() {
             setCurrentSubscription(subscription);
             
             // Fetch updated credits
-            const userCredits = await apiClient.getCredits(true); // Force refresh
+            const userCredits = await apiClient.getCredits();
             setCredits(userCredits);
           } catch (err) {
             console.error('Error checking subscription status:', err);

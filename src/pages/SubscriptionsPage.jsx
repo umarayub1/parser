@@ -26,8 +26,8 @@ function SubscriptionsPage() {
         try {
           setIsLoading(true);
           
-          // Force refresh user credits (bypass cache in case we're coming from a subscription)
-          const credits = await ApiClient.getCredits(true);
+                  // Refresh user credits
+        const credits = await ApiClient.getCredits();
           
           if (credits !== null && credits !== undefined) {
             setCredits(credits);
