@@ -235,7 +235,7 @@ const SupportPage = () => {
               <span style={styles.contactIcon}>📧</span>
               <div>
                 <h4 style={styles.contactMethodTitle}>Email</h4>
-                <p style={styles.contactMethodText}>ramish@parselab.co</p>
+                <p style={styles.contactMethodText}>ceo@parselab.co</p>
                 <p style={styles.contactMethodNote}>Response within 24 hours</p>
               </div>
             </div>
