@@ -53,8 +53,8 @@ const PaymentSuccessPage = () => {
           
           while (creditsAttempts < 3) {
             try {
-              // Force refresh credits from API (bypass cache)
-              credits = await ApiClient.getCredits(true);
+              // Refresh credits from API
+              credits = await ApiClient.getCredits();
               
               // Also update Redux store
               dispatch(fetchCredits());
@@ -95,9 +95,9 @@ const PaymentSuccessPage = () => {
   }, [user, dispatch, sessionId, checkoutId, planName, amount]);
 
   const handleContinue = async () => {
-    // Force refresh credits one more time before navigating
+    // Refresh credits one more time before navigating
     try {
-      const credits = await ApiClient.getCredits(true);
+      const credits = await ApiClient.getCredits();
       dispatch(fetchCredits());
       setUserCredits(credits);
     } catch (err) {
@@ -107,9 +107,9 @@ const PaymentSuccessPage = () => {
   };
 
   const handleStartParsing = async () => {
-    // Force refresh credits one more time before navigating
+    // Refresh credits one more time before navigating
     try {
-      const credits = await ApiClient.getCredits(true);
+      const credits = await ApiClient.getCredits();
       dispatch(fetchCredits());
       setUserCredits(credits);
     } catch (err) {
